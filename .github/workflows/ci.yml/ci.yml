@@ -1,0 +1,35 @@
+name: BLICK Backend CI
+
+on:
+  pull_request:
+    branches: [ "main", "develop" ]
+  push:
+    branches: [ "main", "develop" ]
+
+jobs:
+  quality-assurance:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout do código
+        uses: actions/checkout@v4
+
+      - name: 🐍 Configurar Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: 📦 Instalar dependências base
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest 
+
+      - name: 🔍 Análise de Qualidade Estática (Ruff)
+        run: |
+          ruff check .
+
+      - name: 🧪 Testes Unitários (Pytest)
+        run: |
+          pytest .
