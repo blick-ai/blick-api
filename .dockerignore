@@ -1,0 +1,33 @@
+# Byte-compiled
+__pycache__/
+*.py[codz]
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.github/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+docker-compose.yml
+docker-compose.override.yml
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Testes e lint
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
