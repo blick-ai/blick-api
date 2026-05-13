@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 
 from application.dtos import CapturaInputDTO
-from application.use_cases import SubmitCapturaUseCase
-from interfaces.dependencies import get_submit_captura_use_case
-from interfaces.schemas import CapturaRequest, CapturaResponse
+from application.use_cases import ListClientesUseCase, SubmitCapturaUseCase
+from interfaces.dependencies import get_list_clientes_use_case, get_submit_captura_use_case
+from interfaces.schemas import CapturaRequest, CapturaResponse, ListClientesResponse
 
 router = APIRouter()
 
@@ -26,3 +26,11 @@ def criar_captura(
         captura_id=result.captura_id,
         s3_key=result.s3_key,
     )
+
+
+@router.get("/clientes", response_model=ListClientesResponse)
+def listar_clientes(
+    use_case: ListClientesUseCase = Depends(get_list_clientes_use_case),
+):
+    result = use_case.execute()
+    return ListClientesResponse(cliente_ids=result.cliente_ids)

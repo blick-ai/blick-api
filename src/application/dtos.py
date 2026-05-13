@@ -15,3 +15,8 @@ class CapturaOutputDTO:
     sucesso: bool
     captura_id: str
     s3_key: str
+
+
+@dataclass
+class ListClientesOutputDTO:
+    cliente_ids: list[str]

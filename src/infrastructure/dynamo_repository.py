@@ -11,3 +11,20 @@ class DynamoCapturaRepository(ICapturaRepository):
 
     def save(self, captura: Captura) -> None:
         self._table.put_item(Item=captura.to_dynamo_item())
+
+    def list_cliente_ids(self) -> list[str]:
+        cliente_ids: set[str] = set()
+        scan_kwargs = {
+            "FilterExpression": "entity_type = :et",
+            "ExpressionAttributeValues": {":et": "CAPTURA"},
+            "ProjectionExpression": "cliente_id",
+        }
+        while True:
+            response = self._table.scan(**scan_kwargs)
+            for item in response.get("Items", []):
+                if "cliente_id" in item:
+                    cliente_ids.add(item["cliente_id"])
+            if "LastEvaluatedKey" not in response:
+                break
+            scan_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+        return sorted(cliente_ids)

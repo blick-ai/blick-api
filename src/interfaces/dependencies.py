@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 
-from application.use_cases import SubmitCapturaUseCase
+from application.use_cases import ListClientesUseCase, SubmitCapturaUseCase
 from infrastructure.dynamo_repository import DynamoCapturaRepository
 from infrastructure.s3_storage import S3StorageService
 
@@ -26,3 +26,7 @@ def get_submit_captura_use_case() -> SubmitCapturaUseCase:
         repository=get_dynamo_repository(),
         s3_bucket=S3_BUCKET_NAME,
     )
+
+
+def get_list_clientes_use_case() -> ListClientesUseCase:
+    return ListClientesUseCase(repository=get_dynamo_repository())

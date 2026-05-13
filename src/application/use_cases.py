@@ -2,7 +2,7 @@ import base64
 import uuid
 from datetime import datetime
 
-from application.dtos import CapturaInputDTO, CapturaOutputDTO
+from application.dtos import CapturaInputDTO, CapturaOutputDTO, ListClientesOutputDTO
 from domain.entities import Captura, Coordenadas, JetsonNanoInfo, StatusEntry
 from domain.ports import ICapturaRepository, IStorageService
 
@@ -63,3 +63,12 @@ class SubmitCapturaUseCase:
             captura_id=captura_id,
             s3_key=s3_key,
         )
+
+
+class ListClientesUseCase:
+    def __init__(self, repository: ICapturaRepository):
+        self._repository = repository
+
+    def execute(self) -> ListClientesOutputDTO:
+        cliente_ids = self._repository.list_cliente_ids()
+        return ListClientesOutputDTO(cliente_ids=cliente_ids)

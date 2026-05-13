@@ -13,3 +13,7 @@ class ICapturaRepository(ABC):
     @abstractmethod
     def save(self, captura: Captura) -> None:
         ...
+
+    @abstractmethod
+    def list_cliente_ids(self) -> list[str]:
+        ...

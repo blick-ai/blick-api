@@ -13,3 +13,7 @@ class CapturaResponse(BaseModel):
     sucesso: bool
     captura_id: str
     s3_key: str
+
+
+class ListClientesResponse(BaseModel):
+    cliente_ids: list[str]
