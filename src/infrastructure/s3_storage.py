@@ -1,0 +1,17 @@
+import boto3
+
+from domain.ports import IStorageService
+
+
+class S3StorageService(IStorageService):
+    def __init__(self, bucket_name: str, region: str):
+        self._bucket = bucket_name
+        self._client = boto3.client("s3", region_name=region)
+
+    def upload_image(self, key: str, image_bytes: bytes) -> None:
+        self._client.put_object(
+            Bucket=self._bucket,
+            Key=key,
+            Body=image_bytes,
+            ContentType="image/jpeg",
+        )
