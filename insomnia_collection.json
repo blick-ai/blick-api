@@ -1,0 +1,128 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-05-13T00:00:00.000Z",
+  "__export_source": "insomnia.importers",
+  "resources": [
+    {
+      "_id": "wrk_blick",
+      "_type": "workspace",
+      "name": "Blick API",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_base",
+      "_type": "environment",
+      "parentId": "wrk_blick",
+      "name": "Base Environment",
+      "data": {}
+    },
+    {
+      "_id": "env_local",
+      "_type": "environment",
+      "parentId": "env_base",
+      "name": "Local",
+      "data": {
+        "base_url": "http://localhost:8080",
+        "access_token": ""
+      }
+    },
+    {
+      "_id": "fld_auth",
+      "_type": "request_group",
+      "parentId": "wrk_blick",
+      "name": "Auth"
+    },
+    {
+      "_id": "fld_capturas",
+      "_type": "request_group",
+      "parentId": "wrk_blick",
+      "name": "Capturas"
+    },
+    {
+      "_id": "req_cadastro",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Cadastro",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/cadastro",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"teste@blick.com\",\n  \"senha\": \"BlickTest2026!\"\n}"
+      }
+    },
+    {
+      "_id": "req_confirmar",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Confirmar Cadastro",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/confirmar-cadastro",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"teste@blick.com\",\n  \"codigo\": \"123456\"\n}"
+      }
+    },
+    {
+      "_id": "req_login",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Login",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/login",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"teste@blick.com\",\n  \"senha\": \"BlickTest2026!\"\n}"
+      }
+    },
+    {
+      "_id": "req_recuperar",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Recuperar Senha",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/recuperar-senha",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"teste@blick.com\"\n}"
+      }
+    },
+    {
+      "_id": "req_capturas",
+      "_type": "request",
+      "parentId": "fld_capturas",
+      "name": "POST Capturas",
+      "method": "POST",
+      "url": "{{ _.base_url }}/capturas",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Authorization", "value": "Bearer {{ _.access_token }}" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"dia_mes_ano\": \"13/05/2026\",\n  \"latitude\": -23.6478,\n  \"longitude\": -46.5731,\n  \"imagem_base64\": \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+      }
+    },
+    {
+      "_id": "req_clientes",
+      "_type": "request",
+      "parentId": "fld_capturas",
+      "name": "GET Clientes",
+      "method": "GET",
+      "url": "{{ _.base_url }}/clientes",
+      "headers": []
+    }
+  ]
+}
