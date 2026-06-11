@@ -10,7 +10,12 @@ app = FastAPI(title="Blick API", version="0.1.0")
 # CORS tratado aqui (não no API Gateway): a rota ANY /{proxy+} do HTTP API
 # encaminha o preflight OPTIONS pro container, então o FastAPI precisa
 # responder o OPTIONS com 2xx. Origens configuráveis via CORS_ALLOWED_ORIGINS.
-_default_origins = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+_default_origins = (
+    "http://localhost:5173,"
+    "http://localhost:3000,"
+    "http://127.0.0.1:5173,"
+    "https://develop.d31rrfwauwmx10.amplifyapp.com"
+)
 allowed_origins = [
     o.strip()
     for o in os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
