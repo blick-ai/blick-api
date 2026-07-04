@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 
 from application.dtos import CapturaInputDTO
 from application.use_cases import ListClientesUseCase, SubmitCapturaUseCase
@@ -13,7 +14,7 @@ from interfaces.dependencies import (
     get_auth_service,
     get_list_clientes_use_case,
     get_submit_captura_use_case,
-    oauth2_scheme,
+    security,
 )
 from interfaces.schemas import (
     CadastroRequest,
@@ -32,11 +33,11 @@ auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def get_current_cliente_id(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     auth_service: CognitoAuthService = Depends(get_auth_service),
 ) -> str:
     try:
-        return auth_service.verify_token(token)
+        return auth_service.verify_token(credentials.credentials)
     except BlickAuthError as e:
         raise HTTPException(status_code=401, detail=str(e))
 
