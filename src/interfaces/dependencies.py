@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer
 
 from application.use_cases import ListClientesUseCase, SubmitCapturaUseCase
 from infrastructure.cognito_auth import CognitoAuthService
@@ -12,7 +12,7 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "blick-capturas-tcc")
 DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "blick-table")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+security = HTTPBearer()
 
 
 @lru_cache
