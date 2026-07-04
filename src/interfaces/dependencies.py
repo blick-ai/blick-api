@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 
-from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 
 from application.use_cases import ListClientesUseCase, SubmitCapturaUseCase
 from infrastructure.cognito_auth import CognitoAuthService
