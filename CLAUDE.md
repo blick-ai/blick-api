@@ -194,12 +194,68 @@ docker compose down         # parar
 
 ---
 
+## Deploy (ECS Fargate + ECR + HTTP API)
+
+Fluxo: `Cliente → API Gateway (HTTP API, ANY /{proxy+}) → ECS Fargate (FastAPI) → DynamoDB/S3/Cognito`
+
+### Recursos
+| Recurso | Nome |
+|---|---|
+| ECR | `640168426886.dkr.ecr.us-east-1.amazonaws.com/blick-api` |
+| ECS Cluster | `blick-cluster` |
+| ECS Service | `blick-api-service` |
+| API Gateway ID (HTTP API v2) | `1uzo5w52jk` |
+| Integration ID | `2sz44zo` (HTTP_PROXY, `http://<IP-da-task>:8000/{proxy}`) |
+| URL produção | `https://1uzo5w52jk.execute-api.us-east-1.amazonaws.com` |
+
+### Passos do deploy (PowerShell, da raiz do projeto)
+```powershell
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 640168426886.dkr.ecr.us-east-1.amazonaws.com
+docker build -t blick-api .
+docker tag blick-api:latest 640168426886.dkr.ecr.us-east-1.amazonaws.com/blick-api:latest
+docker push 640168426886.dkr.ecr.us-east-1.amazonaws.com/blick-api:latest
+aws ecs update-service --cluster blick-cluster --service blick-api-service --force-new-deployment --region us-east-1
+```
+
+### ⚠️ PÓS-DEPLOY OBRIGATÓRIO — atualizar IP da task no Gateway
+O serviço **não tem load balancer**, então a integração do Gateway aponta pro **IP público da task**.
+**Todo deploy gera um IP novo → o Gateway responde `503` até atualizar a integração.** Rodar (CloudShell/bash):
+```bash
+TASK_ARN=$(aws ecs list-tasks --cluster blick-cluster --service-name blick-api-service --region us-east-1 --query "taskArns[0]" --output text)
+ENI=$(aws ecs describe-tasks --cluster blick-cluster --tasks "$TASK_ARN" --region us-east-1 --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value | [0]" --output text)
+IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --region us-east-1 --query "NetworkInterfaces[0].Association.PublicIp" --output text)
+aws apigatewayv2 update-integration --api-id 1uzo5w52jk --integration-id 2sz44zo --integration-uri "http://$IP:8000/{proxy}" --region us-east-1
+```
+> **TODO:** colocar um **ALB** na frente do ECS (ou ECS Service Connect/Cloud Map) → DNS fixo, elimina esse passo do IP de vez.
+
+---
+
+## CORS
+
+**CORS é tratado no FastAPI** (`CORSMiddleware` em `src/main.py`), **não no API Gateway**.
+Motivo: a rota `ANY /{proxy+}` do HTTP API inclui o `OPTIONS`, então o preflight **sempre** é encaminhado
+ao container — o Gateway não consegue auto-responder. O FastAPI responde o `OPTIONS` com `200`.
+- **Não** configurar CORS no Gateway (`update-api --cors-configuration`) → causaria header `Access-Control-Allow-Origin` duplicado e o navegador bloqueia.
+- Origens liberadas via env var `CORS_ALLOWED_ORIGINS` (CSV) na task definition; default no código inclui `http://localhost:5173` e o domínio do dashboard Amplify `https://develop.d31rrfwauwmx10.amplifyapp.com`.
+- ⚠️ Se `CORS_ALLOWED_ORIGINS` estiver setada na task definition, ela **sobrescreve** o default do código — incluir todas as origens lá.
+- Com `allow_credentials=True` não pode usar `*` — listar origens explicitamente. Adicionar novos domínios do dashboard aqui quando existirem.
+
+### Teste do preflight
+```bash
+curl -i -X OPTIONS "https://1uzo5w52jk.execute-api.us-east-1.amazonaws.com/auth/login" -H "Origin: http://localhost:5173" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type"
+```
+Esperado: `200` + `server: uvicorn` + `access-control-allow-origin` uma única vez.
+
+---
+
 ## Próximos Passos
 
-- [ ] Implementar autenticação JWT com Cognito (6 arquivos — ver seção abaixo)
+- [x] Implementar autenticação JWT com Cognito
+- [x] Deploy ECS Fargate + ECR + HTTP API
+- [x] CORS funcionando (front ↔ Gateway ↔ ECS)
+- [ ] ALB na frente do ECS (elimina o passo manual do IP no Gateway)
 - [ ] Criar App Client do Jetson Nano no Cognito
 - [ ] Criar usuário de teste no Cognito
-- [ ] Deploy na AWS Lambda + API Gateway
 - [ ] Configurar IAM Role para a Lambda
 - [ ] IA na nuvem para análise de saúde da planta
 - [ ] Dashboard frontend (React + AWS Amplify)
