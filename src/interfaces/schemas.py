@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -8,12 +9,28 @@ class CapturaRequest(BaseModel):
     latitude: float
     longitude: float
     imagem_base64: str = Field(..., min_length=1)
+    modelo_versao_borda: Optional[str] = None
+    confianca_borda: Optional[float] = None
 
 
 class CapturaResponse(BaseModel):
     sucesso: bool
     captura_id: str
     s3_key: str
+
+
+class ClassificacaoResponse(BaseModel):
+    captura_id: str
+    status: str
+    status_geral: Optional[str] = None
+    confianca_status_geral: Optional[float] = None
+    subtipo: Optional[str] = None
+
+
+class PendentesResponse(BaseModel):
+    total: int
+    processadas: int
+    erros: int
 
 
 class ListClientesResponse(BaseModel):

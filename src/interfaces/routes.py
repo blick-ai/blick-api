@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from application.dtos import CapturaInputDTO
-from application.use_cases import ListClientesUseCase, SubmitCapturaUseCase
+from application.use_cases import (
+    ClassifyCapturaUseCase,
+    ClassifyPendentesUseCase,
+    ListClientesUseCase,
+    SubmitCapturaUseCase,
+)
 from domain.exceptions import (
     BlickAuthError,
     BlickInvalidCredentialsError,
@@ -12,6 +17,8 @@ from domain.exceptions import (
 from infrastructure.cognito_auth import CognitoAuthService
 from interfaces.dependencies import (
     get_auth_service,
+    get_classify_captura_use_case,
+    get_classify_pendentes_use_case,
     get_list_clientes_use_case,
     get_submit_captura_use_case,
     security,
@@ -20,11 +27,13 @@ from interfaces.schemas import (
     CadastroRequest,
     CapturaRequest,
     CapturaResponse,
+    ClassificacaoResponse,
     ConfirmarCadastroRequest,
     ListClientesResponse,
     LoginRequest,
     LoginResponse,
     MessageResponse,
+    PendentesResponse,
     RecuperarSenhaRequest,
 )
 
@@ -116,6 +125,8 @@ def criar_captura(
         latitude=body.latitude,
         longitude=body.longitude,
         imagem_base64=body.imagem_base64,
+        modelo_versao_borda=body.modelo_versao_borda,
+        confianca_borda=body.confianca_borda,
     )
     result = use_case.execute(dto)
     return CapturaResponse(
@@ -123,6 +134,43 @@ def criar_captura(
         captura_id=result.captura_id,
         s3_key=result.s3_key,
     )
+
+
+@router.post("/capturas/{captura_id}/classificar", response_model=ClassificacaoResponse)
+def classificar_captura(
+    captura_id: str,
+    timestamp: str,
+    plantacao_id: str = "plantacao-mock-001",
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: ClassifyCapturaUseCase = Depends(get_classify_captura_use_case),
+):
+    try:
+        captura = use_case.execute(plantacao_id, timestamp, captura_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Falha ao classificar: {e}")
+
+    ia = captura.ia_nuvem or {}
+    return ClassificacaoResponse(
+        captura_id=captura.captura_id,
+        status=captura.status,
+        status_geral=ia.get("status_geral"),
+        confianca_status_geral=(
+            float(ia["confianca_status_geral"]) if ia.get("confianca_status_geral") is not None else None
+        ),
+        subtipo=ia.get("subtipo"),
+    )
+
+
+@router.post("/capturas/classificar-pendentes", response_model=PendentesResponse)
+def classificar_pendentes(
+    limite: int = 50,
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: ClassifyPendentesUseCase = Depends(get_classify_pendentes_use_case),
+):
+    resultado = use_case.execute(limite=limite)
+    return PendentesResponse(**resultado)
 
 
 @router.get("/clientes", response_model=ListClientesResponse)

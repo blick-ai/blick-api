@@ -15,3 +15,7 @@ class S3StorageService(IStorageService):
             Body=image_bytes,
             ContentType="image/jpeg",
         )
+
+    def download_image(self, key: str) -> bytes:
+        response = self._client.get_object(Bucket=self._bucket, Key=key)
+        return response["Body"].read()
