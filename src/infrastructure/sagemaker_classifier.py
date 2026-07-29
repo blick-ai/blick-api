@@ -34,3 +34,4 @@ class SageMakerClassificationService(IClassificationService):
             subtipo=corpo.get("subtipo"),
             confianca_subtipo=corpo.get("confianca_subtipo"),
         )
+    

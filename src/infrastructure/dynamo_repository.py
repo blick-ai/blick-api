@@ -51,3 +51,4 @@ class DynamoCapturaRepository(ICapturaRepository):
                 break
             scan_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
         return sorted(cliente_ids)
+    

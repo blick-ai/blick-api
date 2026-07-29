@@ -151,3 +151,4 @@ class ListClientesUseCase:
     def execute(self) -> ListClientesOutputDTO:
         cliente_ids = self._repository.list_cliente_ids()
         return ListClientesOutputDTO(cliente_ids=cliente_ids)
+    

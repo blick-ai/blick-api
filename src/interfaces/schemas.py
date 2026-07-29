@@ -76,3 +76,4 @@ class ConfirmarCadastroRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+    

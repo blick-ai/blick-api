@@ -152,13 +152,12 @@ def classificar_captura(
         raise HTTPException(status_code=502, detail=f"Falha ao classificar: {e}")
 
     ia = captura.ia_nuvem or {}
+    confianca_str = ia.get("confianca_status_geral")
     return ClassificacaoResponse(
         captura_id=captura.captura_id,
         status=captura.status,
         status_geral=ia.get("status_geral"),
-        confianca_status_geral=(
-            float(ia["confianca_status_geral"]) if ia.get("confianca_status_geral") is not None else None
-        ),
+        confianca_status_geral=float(confianca_str) if confianca_str is not None else None,
         subtipo=ia.get("subtipo"),
     )
 

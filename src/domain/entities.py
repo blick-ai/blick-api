@@ -158,3 +158,4 @@ class Captura:
             alerta_emitido_em=item.get("alerta_emitido_em"),
             ttl=item.get("ttl"),
         )
+    
