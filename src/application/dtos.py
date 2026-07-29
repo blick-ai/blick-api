@@ -32,4 +32,3 @@ class ClassificacaoOutputDTO:
 @dataclass
 class ListClientesOutputDTO:
     cliente_ids: list[str]
-    

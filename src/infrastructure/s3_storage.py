@@ -19,4 +19,3 @@ class S3StorageService(IStorageService):
     def download_image(self, key: str) -> bytes:
         response = self._client.get_object(Bucket=self._bucket, Key=key)
         return response["Body"].read()
-    
