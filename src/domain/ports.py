@@ -63,4 +63,3 @@ class IAuthService(ABC):
     @abstractmethod
     def confirmar_cadastro(self, email: str, codigo: str) -> None:
         ...
-        
