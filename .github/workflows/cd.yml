@@ -1,0 +1,44 @@
+name: CD
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  DeployToAWS:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/aluno_22.00667-2_gha_blickapi_v2
+          role-session-name: github-action-blick-api
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Installing Dependencies
+        run: |
+          npm install -g aws-cdk
+          cd iac
+          pip install -r requirements.txt
+
+      - name: DeployWithCDK
+        run: |
+          cd iac
+          cdk synth
+          cdk deploy --require-approval never
+        env:
+          AWS_REGION: us-east-1
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          MODEL_DATA_URL: ${{ secrets.SAGEMAKER_MODEL_DATA_URL }}
+          SAGEMAKER_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/aluno_22.00667-2_sagemaker_blick
+          SAGEMAKER_ENDPOINT_NAME: blick-classificador

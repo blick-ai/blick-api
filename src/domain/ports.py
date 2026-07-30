@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
 
-from domain.entities import Captura
+from domain.entities import Captura, ClassificacaoResultado
 
 
 class IStorageService(ABC):
     @abstractmethod
     def upload_image(self, key: str, image_bytes: bytes) -> None:
+        ...
+
+    @abstractmethod
+    def download_image(self, key: str) -> bytes:
         ...
 
 
@@ -15,7 +19,25 @@ class ICapturaRepository(ABC):
         ...
 
     @abstractmethod
+    def get(self, plantacao_id: str, timestamp: str, captura_id: str) -> Captura | None:
+        ...
+
+    @abstractmethod
+    def update(self, captura: Captura) -> None:
+        ...
+
+    @abstractmethod
+    def list_by_status(self, status: str, limit: int = 50) -> list[Captura]:
+        ...
+
+    @abstractmethod
     def list_cliente_ids(self) -> list[str]:
+        ...
+
+
+class IClassificationService(ABC):
+    @abstractmethod
+    def classify(self, image_bytes: bytes) -> ClassificacaoResultado:
         ...
 
 

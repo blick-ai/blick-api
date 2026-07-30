@@ -12,6 +12,29 @@ class DynamoCapturaRepository(ICapturaRepository):
     def save(self, captura: Captura) -> None:
         self._table.put_item(Item=captura.to_dynamo_item())
 
+    def get(self, plantacao_id: str, timestamp: str, captura_id: str) -> Captura | None:
+        pk = f"PLANT#{plantacao_id}"
+        sk = f"CAPTURA#{timestamp}#{captura_id}"
+        response = self._table.get_item(Key={"PK": pk, "SK": sk})
+        item = response.get("Item")
+        return Captura.from_dynamo_item(item) if item else None
+
+    def update(self, captura: Captura) -> None:
+        # put_item sobrescreve o item inteiro — como Captura.to_dynamo_item()
+        # sempre serializa o objeto completo (incluindo o que ja tinha antes,
+        # como cliente_id e coordenadas), isso funciona tanto pra criar
+        # quanto pra atualizar sem precisar de um UpdateExpression separado.
+        self._table.put_item(Item=captura.to_dynamo_item())
+
+    def list_by_status(self, status: str, limit: int = 50) -> list[Captura]:
+        response = self._table.query(
+            IndexName="GSI2",
+            KeyConditionExpression="GSI2PK = :status",
+            ExpressionAttributeValues={":status": f"STATUS#{status}"},
+            Limit=limit,
+        )
+        return [Captura.from_dynamo_item(item) for item in response.get("Items", [])]
+
     def list_cliente_ids(self) -> list[str]:
         cliente_ids: set[str] = set()
         scan_kwargs = {
