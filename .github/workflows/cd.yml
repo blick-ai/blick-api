@@ -35,10 +35,12 @@ jobs:
         run: |
           cd iac
           cdk synth
-          cdk deploy --require-approval never
+          cdk deploy --method=direct --require-approval never
         env:
           AWS_REGION: us-east-1
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          # atualize esse secret (Settings -> Secrets and variables -> Actions -> Secrets)
+          # toda vez que um novo model.tar.gz for enviado ao S3 pelo blick-model
           MODEL_DATA_URL: ${{ secrets.SAGEMAKER_MODEL_DATA_URL }}
           SAGEMAKER_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/aluno_22.00667-2_sagemaker_blick
           SAGEMAKER_ENDPOINT_NAME: blick-classificador
