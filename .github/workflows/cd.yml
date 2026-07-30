@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - develop
-  workflow_dispatch:
 
 jobs:
   DeployToAWS:
@@ -35,7 +34,11 @@ jobs:
         run: |
           cd iac
           cdk synth
-          cdk deploy --method=direct --require-approval never
+          aws cloudformation deploy \
+            --template-file cdk.out/BlickApiStack.template.json \
+            --stack-name BlickApiStack \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
         env:
           AWS_REGION: us-east-1
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
