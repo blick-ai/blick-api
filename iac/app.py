@@ -20,6 +20,7 @@ BlickApiStack(
     sagemaker_role_arn=sagemaker_role_arn,
     endpoint_name=endpoint_name,
     env=cdk.Environment(account=aws_account_id, region=aws_region),
+    synthesizer=cdk.CliCredentialsStackSynthesizer(),
 )
 
 app.synth()
