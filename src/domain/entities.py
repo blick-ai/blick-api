@@ -130,11 +130,15 @@ class Captura:
     def from_dynamo_item(item: dict) -> "Captura":
         coord = item["coordenadas"]
         jetson = item["jetson_nano"]
+
+        plantacao_id = item.get("plantacao_id") or item["PK"].removeprefix("PLANT#")
+        carrinho_id = item.get("carrinho_id") or item["GSI1PK"].removeprefix("CART#")
+
         return Captura(
             captura_id=item["captura_id"],
             cliente_id=item["cliente_id"],
-            plantacao_id=item["plantacao_id"],
-            carrinho_id=item["carrinho_id"],
+            plantacao_id=plantacao_id,
+            carrinho_id=carrinho_id,
             timestamp=item["timestamp"],
             coordenadas=Coordenadas(
                 latitude=float(coord["latitude"]),
