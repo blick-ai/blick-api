@@ -109,6 +109,7 @@ class ClassifyCapturaUseCase:
 
         captura.ia_nuvem = resultado.to_dict()
         captura.status = "CLASSIFICADO"
+        captura.erro_detalhes = None
         captura.status_history.append(StatusEntry(status="CLASSIFICADO", timestamp=agora))
 
         # alerta so faz sentido se nao for planta saudavel nem "nao_milho"
