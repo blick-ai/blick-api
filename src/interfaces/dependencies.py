@@ -6,6 +6,8 @@ from fastapi.security import HTTPBearer
 from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
+    GetCapturaUseCase,
+    ListCapturasUseCase,
     ListClientesUseCase,
     SubmitCapturaUseCase,
 )
@@ -63,6 +65,14 @@ def get_classify_pendentes_use_case() -> ClassifyPendentesUseCase:
         repository=get_dynamo_repository(),
         classify_use_case=get_classify_captura_use_case(),
     )
+
+
+def get_list_capturas_use_case() -> ListCapturasUseCase:
+    return ListCapturasUseCase(repository=get_dynamo_repository())
+
+
+def get_captura_use_case() -> GetCapturaUseCase:
+    return GetCapturaUseCase(repository=get_dynamo_repository(), storage=get_s3_storage())
 
 
 def get_list_clientes_use_case() -> ListClientesUseCase:
