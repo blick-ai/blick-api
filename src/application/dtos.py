@@ -30,5 +30,52 @@ class ClassificacaoOutputDTO:
 
 
 @dataclass
+class CapturaResumoDTO:
+    """Item enxuto pra listagem — só o que faz sentido numa tabela/mapa."""
+    captura_id: str
+    timestamp: str
+    status: str
+    status_geral: Optional[str]
+    confianca_status_geral: Optional[float]
+    latitude: float
+    longitude: float
+    alerta_emitido: bool
+
+
+@dataclass
+class ListCapturasOutputDTO:
+    capturas: list[CapturaResumoDTO]
+    pagina: int
+    tamanho_pagina: int
+    total: int
+    total_paginas: int
+
+
+@dataclass
+class CapturaDetalheDTO:
+    """Tudo — pra tela de detalhe de uma captura específica."""
+    captura_id: str
+    plantacao_id: str
+    carrinho_id: str
+    cliente_id: str
+    timestamp: str
+    status: str
+    latitude: float
+    longitude: float
+    status_geral: Optional[str]
+    confianca_status_geral: Optional[float]
+    subtipo: Optional[str]
+    confianca_subtipo: Optional[float]
+    probabilidades: Optional[dict]
+    modelo_versao_borda: str
+    confianca_borda: float
+    imagem_url: Optional[str]
+    status_history: list[dict]
+    erro_detalhes: Optional[str]
+    alerta_emitido: bool
+    alerta_emitido_em: Optional[str]
+
+
+@dataclass
 class ListClientesOutputDTO:
     cliente_ids: list[str]

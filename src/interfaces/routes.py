@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 
 from application.dtos import CapturaInputDTO
 from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
+    GetCapturaUseCase,
+    ListCapturasUseCase,
     ListClientesUseCase,
     SubmitCapturaUseCase,
 )
@@ -17,18 +19,23 @@ from domain.exceptions import (
 from infrastructure.cognito_auth import CognitoAuthService
 from interfaces.dependencies import (
     get_auth_service,
+    get_captura_use_case,
     get_classify_captura_use_case,
     get_classify_pendentes_use_case,
+    get_list_capturas_use_case,
     get_list_clientes_use_case,
     get_submit_captura_use_case,
     security,
 )
 from interfaces.schemas import (
     CadastroRequest,
+    CapturaDetalheResponse,
     CapturaRequest,
     CapturaResponse,
+    CapturaResumoResponse,
     ClassificacaoResponse,
     ConfirmarCadastroRequest,
+    ListCapturasResponse,
     ListClientesResponse,
     LoginRequest,
     LoginResponse,
@@ -133,6 +140,90 @@ def criar_captura(
         sucesso=result.sucesso,
         captura_id=result.captura_id,
         s3_key=result.s3_key,
+    )
+
+
+@router.get("/capturas", response_model=ListCapturasResponse)
+def listar_capturas(
+    plantacao_id: str = Query(default="plantacao-mock-001", alias="plantacaoId"),
+    status_geral: str | None = Query(
+        default=None,
+        alias="statusGeral",
+        description="Filtra por saudavel, praga, doenca ou nao_milho",
+    ),
+    data_inicio: str | None = Query(
+        default=None, alias="dataInicio", description="Formato YYYY-MM-DD, inclusive"
+    ),
+    data_fim: str | None = Query(
+        default=None, alias="dataFim", description="Formato YYYY-MM-DD, inclusive"
+    ),
+    pagina: int = Query(default=1, ge=1),
+    tamanho_pagina: int = Query(default=8, ge=1, le=100, alias="tamanhoPagina"),
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: ListCapturasUseCase = Depends(get_list_capturas_use_case),
+):
+    resultado = use_case.execute(
+        plantacao_id=plantacao_id,
+        status_geral=status_geral,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        pagina=pagina,
+        tamanho_pagina=tamanho_pagina,
+    )
+    return ListCapturasResponse(
+        capturas=[
+            CapturaResumoResponse(
+                captura_id=c.captura_id,
+                timestamp=c.timestamp,
+                status=c.status,
+                status_geral=c.status_geral,
+                confianca_status_geral=c.confianca_status_geral,
+                latitude=c.latitude,
+                longitude=c.longitude,
+                alerta_emitido=c.alerta_emitido,
+            )
+            for c in resultado.capturas
+        ],
+        pagina=resultado.pagina,
+        tamanho_pagina=resultado.tamanho_pagina,
+        total=resultado.total,
+        total_paginas=resultado.total_paginas,
+    )
+
+
+@router.get("/capturas/{captura_id}", response_model=CapturaDetalheResponse)
+def obter_captura(
+    captura_id: str,
+    timestamp: str,
+    plantacao_id: str = "plantacao-mock-001",
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: GetCapturaUseCase = Depends(get_captura_use_case),
+):
+    detalhe = use_case.execute(plantacao_id, timestamp, captura_id)
+    if detalhe is None:
+        raise HTTPException(status_code=404, detail="Captura não encontrada")
+
+    return CapturaDetalheResponse(
+        captura_id=detalhe.captura_id,
+        plantacao_id=detalhe.plantacao_id,
+        carrinho_id=detalhe.carrinho_id,
+        cliente_id=detalhe.cliente_id,
+        timestamp=detalhe.timestamp,
+        status=detalhe.status,
+        latitude=detalhe.latitude,
+        longitude=detalhe.longitude,
+        status_geral=detalhe.status_geral,
+        confianca_status_geral=detalhe.confianca_status_geral,
+        subtipo=detalhe.subtipo,
+        confianca_subtipo=detalhe.confianca_subtipo,
+        probabilidades=detalhe.probabilidades,
+        modelo_versao_borda=detalhe.modelo_versao_borda,
+        confianca_borda=detalhe.confianca_borda,
+        imagem_url=detalhe.imagem_url,
+        status_history=detalhe.status_history,
+        erro_detalhes=detalhe.erro_detalhes,
+        alerta_emitido=detalhe.alerta_emitido,
+        alerta_emitido_em=detalhe.alerta_emitido_em,
     )
 
 

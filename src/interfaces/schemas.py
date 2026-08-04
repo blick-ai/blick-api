@@ -33,6 +33,48 @@ class PendentesResponse(BaseModel):
     erros: int
 
 
+class CapturaResumoResponse(BaseModel):
+    captura_id: str
+    timestamp: str
+    status: str
+    status_geral: Optional[str] = None
+    confianca_status_geral: Optional[float] = None
+    latitude: float
+    longitude: float
+    alerta_emitido: bool
+
+
+class ListCapturasResponse(BaseModel):
+    capturas: list[CapturaResumoResponse]
+    pagina: int
+    tamanho_pagina: int
+    total: int
+    total_paginas: int
+
+
+class CapturaDetalheResponse(BaseModel):
+    captura_id: str
+    plantacao_id: str
+    carrinho_id: str
+    cliente_id: str
+    timestamp: str
+    status: str
+    latitude: float
+    longitude: float
+    status_geral: Optional[str] = None
+    confianca_status_geral: Optional[float] = None
+    subtipo: Optional[str] = None
+    confianca_subtipo: Optional[float] = None
+    probabilidades: Optional[dict] = None
+    modelo_versao_borda: str
+    confianca_borda: float
+    imagem_url: Optional[str] = None
+    status_history: list[dict]
+    erro_detalhes: Optional[str] = None
+    alerta_emitido: bool
+    alerta_emitido_em: Optional[str] = None
+
+
 class ListClientesResponse(BaseModel):
     cliente_ids: list[str]
 

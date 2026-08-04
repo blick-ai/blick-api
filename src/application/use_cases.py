@@ -2,7 +2,14 @@ import base64
 import uuid
 from datetime import datetime
 
-from application.dtos import CapturaInputDTO, CapturaOutputDTO, ListClientesOutputDTO
+from application.dtos import (
+    CapturaDetalheDTO,
+    CapturaInputDTO,
+    CapturaOutputDTO,
+    CapturaResumoDTO,
+    ListCapturasOutputDTO,
+    ListClientesOutputDTO,
+)
 from domain.entities import Captura, Coordenadas, JetsonNanoInfo, StatusEntry
 from domain.ports import ICapturaRepository, IClassificationService, IStorageService
 
@@ -109,6 +116,9 @@ class ClassifyCapturaUseCase:
 
         captura.ia_nuvem = resultado.to_dict()
         captura.status = "CLASSIFICADO"
+        # limpa erro de uma tentativa anterior mal sucedida, se houver —
+        # sem isso, reclassificar uma captura que falhou antes deixava a
+        # mensagem de erro velha "grudada" mesmo com sucesso agora
         captura.erro_detalhes = None
         captura.status_history.append(StatusEntry(status="CLASSIFICADO", timestamp=agora))
 
@@ -130,7 +140,9 @@ class ClassifyPendentesUseCase:
         self._classify_use_case = classify_use_case
 
     def execute(self, limite: int = 50) -> dict:
-        pendentes = self._repository.list_by_status("PENDENTE", limit=limite)
+        pendentes = self._repository.list_by_status(
+            "PENDENTE", plantacao_id=MOCK_PLANTACAO_ID, limit=limite
+        )
         processadas, erros = 0, 0
 
         for captura in pendentes:
@@ -152,3 +164,118 @@ class ListClientesUseCase:
     def execute(self) -> ListClientesOutputDTO:
         cliente_ids = self._repository.list_cliente_ids()
         return ListClientesOutputDTO(cliente_ids=cliente_ids)
+
+
+def _resumo_de(captura: Captura) -> CapturaResumoDTO:
+    ia = captura.ia_nuvem or {}
+    confianca_str = ia.get("confianca_status_geral")
+    return CapturaResumoDTO(
+        captura_id=captura.captura_id,
+        timestamp=captura.timestamp,
+        status=captura.status,
+        status_geral=ia.get("status_geral"),
+        confianca_status_geral=float(confianca_str) if confianca_str is not None else None,
+        latitude=captura.coordenadas.latitude,
+        longitude=captura.coordenadas.longitude,
+        alerta_emitido=captura.alerta_emitido,
+    )
+
+
+class ListCapturasUseCase:
+    """
+    GET geral — lista enxuta de capturas de uma plantacao, mais recentes
+    primeiro por padrao. Suporta filtro por status_geral (saudavel/praga/
+    doenca/nao_milho), por periodo de data, e paginacao numerada (8 por
+    pagina por padrao). Pensado pra alimentar dashboard/mapa/tabela, nao
+    pra trazer o detalhe completo de cada item (isso e o GetCapturaUseCase).
+    """
+
+    def __init__(self, repository: ICapturaRepository):
+        self._repository = repository
+
+    def execute(
+        self,
+        plantacao_id: str = MOCK_PLANTACAO_ID,
+        status_geral: str | None = None,
+        data_inicio: str | None = None,
+        data_fim: str | None = None,
+        pagina: int = 1,
+        tamanho_pagina: int = 8,
+    ) -> ListCapturasOutputDTO:
+        capturas, total = self._repository.list_by_plantacao(
+            plantacao_id=plantacao_id,
+            status_geral=status_geral,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            pagina=pagina,
+            tamanho_pagina=tamanho_pagina,
+        )
+        total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
+        return ListCapturasOutputDTO(
+            capturas=[_resumo_de(c) for c in capturas],
+            pagina=pagina,
+            tamanho_pagina=tamanho_pagina,
+            total=total,
+            total_paginas=total_paginas,
+        )
+
+
+class GetCapturaUseCase:
+    """GET especifico — detalhe completo de uma captura, incluindo URL
+    assinada da imagem (o front nao precisa de credencial AWS pra exibir
+    a foto — a URL ja vem pronta pra usar direto num <img src=...>)."""
+
+    def __init__(self, repository: ICapturaRepository, storage: IStorageService):
+        self._repository = repository
+        self._storage = storage
+
+    def execute(
+        self, plantacao_id: str, timestamp: str, captura_id: str
+    ) -> CapturaDetalheDTO | None:
+        captura = self._repository.get(plantacao_id, timestamp, captura_id)
+        if captura is None:
+            return None
+
+        ia = captura.ia_nuvem or {}
+        probabilidades = ia.get("probabilidades")
+        if probabilidades is not None:
+            probabilidades = {k: float(v) for k, v in probabilidades.items()}
+
+        confianca_status_str = ia.get("confianca_status_geral")
+        confianca_subtipo_str = ia.get("confianca_subtipo")
+
+        try:
+            imagem_url = self._storage.generate_presigned_url(captura.s3_key)
+        except Exception:
+            # se a URL nao puder ser gerada por algum motivo, o resto do
+            # detalhe ainda e util — nao derruba a resposta inteira por isso
+            imagem_url = None
+
+        return CapturaDetalheDTO(
+            captura_id=captura.captura_id,
+            plantacao_id=captura.plantacao_id,
+            carrinho_id=captura.carrinho_id,
+            cliente_id=captura.cliente_id,
+            timestamp=captura.timestamp,
+            status=captura.status,
+            latitude=captura.coordenadas.latitude,
+            longitude=captura.coordenadas.longitude,
+            status_geral=ia.get("status_geral"),
+            confianca_status_geral=(
+                float(confianca_status_str) if confianca_status_str is not None else None
+            ),
+            subtipo=ia.get("subtipo"),
+            confianca_subtipo=(
+                float(confianca_subtipo_str) if confianca_subtipo_str is not None else None
+            ),
+            probabilidades=probabilidades,
+            modelo_versao_borda=captura.jetson_nano.modelo_versao,
+            confianca_borda=captura.jetson_nano.confianca,
+            imagem_url=imagem_url,
+            status_history=[
+                {"status": e.status, "timestamp": e.timestamp} for e in captura.status_history
+            ],
+            erro_detalhes=captura.erro_detalhes,
+            alerta_emitido=captura.alerta_emitido,
+            alerta_emitido_em=captura.alerta_emitido_em,
+        )
