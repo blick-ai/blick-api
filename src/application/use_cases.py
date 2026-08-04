@@ -140,7 +140,7 @@ class ClassifyPendentesUseCase:
         self._classify_use_case = classify_use_case
 
     def execute(self, limite: int = 50) -> dict:
-        pendentes = self._repository.list_by_status("PENDENTE", limit=limite)
+        pendentes = self._repository.list_by_status("PENDENTE", plantacao_id=MOCK_PLANTACAO_ID, limit=limite)
         processadas, erros = 0, 0
 
         for captura in pendentes:

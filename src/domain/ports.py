@@ -32,13 +32,14 @@ class ICapturaRepository(ABC):
         ...
 
     @abstractmethod
-    def list_by_status(self, status: str, limit: int = 50) -> list[Captura]:
+    def list_by_status(self, status: str, plantacao_id: str = "plantacao-mock-001", limit: int = 50) -> list[Captura]:
         ...
 
     @abstractmethod
     def list_by_plantacao(
         self,
         plantacao_id: str,
+        status: Optional[str] = None,
         status_geral: Optional[str] = None,
         data_inicio: Optional[str] = None,
         data_fim: Optional[str] = None,
