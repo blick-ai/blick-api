@@ -145,14 +145,20 @@ def criar_captura(
 
 @router.get("/capturas", response_model=ListCapturasResponse)
 def listar_capturas(
-    plantacao_id: str = "plantacao-mock-001",
+    plantacao_id: str = Query(default="plantacao-mock-001", alias="plantacaoId"),
     status_geral: str | None = Query(
-        default=None, description="Filtra por saudavel, praga, doenca ou nao_milho"
+        default=None,
+        alias="statusGeral",
+        description="Filtra por saudavel, praga, doenca ou nao_milho",
     ),
-    data_inicio: str | None = Query(default=None, description="Formato YYYY-MM-DD, inclusive"),
-    data_fim: str | None = Query(default=None, description="Formato YYYY-MM-DD, inclusive"),
+    data_inicio: str | None = Query(
+        default=None, alias="dataInicio", description="Formato YYYY-MM-DD, inclusive"
+    ),
+    data_fim: str | None = Query(
+        default=None, alias="dataFim", description="Formato YYYY-MM-DD, inclusive"
+    ),
     pagina: int = Query(default=1, ge=1),
-    tamanho_pagina: int = Query(default=8, ge=1, le=100),
+    tamanho_pagina: int = Query(default=8, ge=1, le=100, alias="tamanhoPagina"),
     cliente_id: str = Depends(get_current_cliente_id),
     use_case: ListCapturasUseCase = Depends(get_list_capturas_use_case),
 ):

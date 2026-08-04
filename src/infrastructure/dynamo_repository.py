@@ -26,7 +26,9 @@ class DynamoCapturaRepository(ICapturaRepository):
         # quanto pra atualizar sem precisar de um UpdateExpression separado.
         self._table.put_item(Item=captura.to_dynamo_item())
 
-    def list_by_status(self, status: str, plantacao_id: str = "plantacao-mock-001", limit: int = 50) -> list[Captura]:
+    def list_by_status(
+        self, status: str, plantacao_id: str = "plantacao-mock-001", limit: int = 50
+    ) -> list[Captura]:
         # PENSADO PRA USAR GSI2 originalmente, mas a tabela real nao tem
         # esse indice criado na infra (so existe no calculo do item, nunca
         # foi provisionado na tabela em si — ver conversa de 04/08). Em vez

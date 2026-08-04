@@ -140,7 +140,9 @@ class ClassifyPendentesUseCase:
         self._classify_use_case = classify_use_case
 
     def execute(self, limite: int = 50) -> dict:
-        pendentes = self._repository.list_by_status("PENDENTE", plantacao_id=MOCK_PLANTACAO_ID, limit=limite)
+        pendentes = self._repository.list_by_status(
+            "PENDENTE", plantacao_id=MOCK_PLANTACAO_ID, limit=limite
+        )
         processadas, erros = 0, 0
 
         for captura in pendentes:
@@ -166,14 +168,13 @@ class ListClientesUseCase:
 
 def _resumo_de(captura: Captura) -> CapturaResumoDTO:
     ia = captura.ia_nuvem or {}
+    confianca_str = ia.get("confianca_status_geral")
     return CapturaResumoDTO(
         captura_id=captura.captura_id,
         timestamp=captura.timestamp,
         status=captura.status,
         status_geral=ia.get("status_geral"),
-        confianca_status_geral=(
-            float(ia["confianca_status_geral"]) if ia.get("confianca_status_geral") is not None else None
-        ),
+        confianca_status_geral=float(confianca_str) if confianca_str is not None else None,
         latitude=captura.coordenadas.latitude,
         longitude=captura.coordenadas.longitude,
         alerta_emitido=captura.alerta_emitido,
@@ -228,7 +229,9 @@ class GetCapturaUseCase:
         self._repository = repository
         self._storage = storage
 
-    def execute(self, plantacao_id: str, timestamp: str, captura_id: str) -> CapturaDetalheDTO | None:
+    def execute(
+        self, plantacao_id: str, timestamp: str, captura_id: str
+    ) -> CapturaDetalheDTO | None:
         captura = self._repository.get(plantacao_id, timestamp, captura_id)
         if captura is None:
             return None
@@ -237,6 +240,9 @@ class GetCapturaUseCase:
         probabilidades = ia.get("probabilidades")
         if probabilidades is not None:
             probabilidades = {k: float(v) for k, v in probabilidades.items()}
+
+        confianca_status_str = ia.get("confianca_status_geral")
+        confianca_subtipo_str = ia.get("confianca_subtipo")
 
         try:
             imagem_url = self._storage.generate_presigned_url(captura.s3_key)
@@ -256,11 +262,11 @@ class GetCapturaUseCase:
             longitude=captura.coordenadas.longitude,
             status_geral=ia.get("status_geral"),
             confianca_status_geral=(
-                float(ia["confianca_status_geral"]) if ia.get("confianca_status_geral") is not None else None
+                float(confianca_status_str) if confianca_status_str is not None else None
             ),
             subtipo=ia.get("subtipo"),
             confianca_subtipo=(
-                float(ia["confianca_subtipo"]) if ia.get("confianca_subtipo") is not None else None
+                float(confianca_subtipo_str) if confianca_subtipo_str is not None else None
             ),
             probabilidades=probabilidades,
             modelo_versao_borda=captura.jetson_nano.modelo_versao,
