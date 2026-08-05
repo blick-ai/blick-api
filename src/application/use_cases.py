@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from application.filtro_enquadramento import possui_verde_suficiente
+from application.preprocessamento_imagem import redimensionar_para_classificacao
 from application.dtos import (
     CapturaDetalheDTO,
     CapturaInputDTO,
@@ -113,6 +114,7 @@ class ClassifyCapturaUseCase:
 
         try:
             image_bytes = self._storage.download_image(captura.s3_key)
+            image_bytes = redimensionar_para_classificacao(image_bytes)
 
             if possui_verde_suficiente(image_bytes):
                 resultado = self._classifier.classify(image_bytes)
