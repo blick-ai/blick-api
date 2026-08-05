@@ -33,6 +33,17 @@ class PendentesResponse(BaseModel):
     erros: int
 
 
+class ReclassificarResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    pagina: int
+    tamanho_pagina: int = Field(alias="tamanhoPagina")
+    total: int
+    total_paginas: int = Field(alias="totalPaginas")
+    processadas: int
+    erros: int
+
+
 class CapturaResumoResponse(BaseModel):
     model_config = {"populate_by_name": True}
 

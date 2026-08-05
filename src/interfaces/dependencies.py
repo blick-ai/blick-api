@@ -9,6 +9,7 @@ from application.use_cases import (
     GetCapturaUseCase,
     ListCapturasUseCase,
     ListClientesUseCase,
+    ReclassificarTodasUseCase,
     SubmitCapturaUseCase,
 )
 from infrastructure.cognito_auth import CognitoAuthService
@@ -62,6 +63,13 @@ def get_classify_captura_use_case() -> ClassifyCapturaUseCase:
 
 def get_classify_pendentes_use_case() -> ClassifyPendentesUseCase:
     return ClassifyPendentesUseCase(
+        repository=get_dynamo_repository(),
+        classify_use_case=get_classify_captura_use_case(),
+    )
+
+
+def get_reclassificar_todas_use_case() -> ReclassificarTodasUseCase:
+    return ReclassificarTodasUseCase(
         repository=get_dynamo_repository(),
         classify_use_case=get_classify_captura_use_case(),
     )

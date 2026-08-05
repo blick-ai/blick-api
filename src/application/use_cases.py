@@ -177,6 +177,55 @@ class ClassifyPendentesUseCase:
         return {"total": len(pendentes), "processadas": processadas, "erros": erros}
 
 
+class ReclassificarTodasUseCase:
+    """
+    Reclassifica capturas em lote, INDEPENDENTE do status atual (inclusive
+    as ja CLASSIFICADAS antes) — usado quando uma mudanca no pipeline
+    (por exemplo, o filtro de enquadramento) precisa ser aplicada
+    retroativamente a capturas que ja tinham sido processadas.
+
+    Diferente de ClassifyPendentesUseCase (onde o conjunto "pendente"
+    encolhe sozinho a cada chamada), aqui o conjunto NAO encolhe — a
+    captura continua CLASSIFICADO depois de reclassificada. Por isso usa
+    paginacao explicita (pagina 1, 2, 3...) em vez de repetir ate total
+    zerar.
+    """
+
+    def __init__(self, repository: ICapturaRepository, classify_use_case: ClassifyCapturaUseCase):
+        self._repository = repository
+        self._classify_use_case = classify_use_case
+
+    def execute(
+        self,
+        plantacao_id: str = MOCK_PLANTACAO_ID,
+        pagina: int = 1,
+        tamanho_pagina: int = 20,
+    ) -> dict:
+        capturas, total = self._repository.list_by_plantacao(
+            plantacao_id=plantacao_id, pagina=pagina, tamanho_pagina=tamanho_pagina
+        )
+        processadas, erros = 0, 0
+
+        for captura in capturas:
+            try:
+                self._classify_use_case.execute(
+                    captura.plantacao_id, captura.timestamp, captura.captura_id
+                )
+                processadas += 1
+            except Exception:
+                erros += 1
+
+        total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
+        return {
+            "pagina": pagina,
+            "tamanho_pagina": tamanho_pagina,
+            "total": total,
+            "total_paginas": total_paginas,
+            "processadas": processadas,
+            "erros": erros,
+        }
+
+
 class ListClientesUseCase:
     def __init__(self, repository: ICapturaRepository):
         self._repository = repository
