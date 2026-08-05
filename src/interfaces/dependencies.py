@@ -68,7 +68,7 @@ def get_classify_pendentes_use_case() -> ClassifyPendentesUseCase:
 
 
 def get_list_capturas_use_case() -> ListCapturasUseCase:
-    return ListCapturasUseCase(repository=get_dynamo_repository())
+    return ListCapturasUseCase(repository=get_dynamo_repository(), storage=get_s3_storage())
 
 
 def get_captura_use_case() -> GetCapturaUseCase:
