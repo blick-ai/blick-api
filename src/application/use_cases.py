@@ -2,6 +2,7 @@ import base64
 import uuid
 from datetime import datetime
 
+from application.filtro_enquadramento import possui_verde_suficiente
 from application.dtos import (
     CapturaDetalheDTO,
     CapturaInputDTO,
@@ -10,7 +11,13 @@ from application.dtos import (
     ListCapturasOutputDTO,
     ListClientesOutputDTO,
 )
-from domain.entities import Captura, Coordenadas, JetsonNanoInfo, StatusEntry
+from domain.entities import (
+    Captura,
+    ClassificacaoResultado,
+    Coordenadas,
+    JetsonNanoInfo,
+    StatusEntry,
+)
 from domain.ports import ICapturaRepository, IClassificationService, IStorageService
 
 MOCK_PLANTACAO_ID = "plantacao-mock-001"
@@ -106,7 +113,20 @@ class ClassifyCapturaUseCase:
 
         try:
             image_bytes = self._storage.download_image(captura.s3_key)
-            resultado = self._classifier.classify(image_bytes)
+
+            if possui_verde_suficiente(image_bytes):
+                resultado = self._classifier.classify(image_bytes)
+            else:
+                # nao vale a pena gastar uma chamada no SageMaker numa
+                # imagem sem verde suficiente pra ter chance de ser milho
+                # (pulso bloqueando a camera, foto noturna, corredor
+                # interno...) — ja cai direto como nao_milho
+                resultado = ClassificacaoResultado(
+                    status_geral="nao_milho",
+                    confianca_status_geral=1.0,
+                    probabilidades={"saudavel": 0.0, "praga": 0.0, "doenca": 0.0, "nao_milho": 1.0},
+                    origem="filtro_enquadramento",
+                )
         except Exception as e:
             captura.status = "ERRO"
             captura.erro_detalhes = str(e)

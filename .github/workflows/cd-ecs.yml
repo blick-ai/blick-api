@@ -1,0 +1,80 @@
+name: CD ECS
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORIO: blick-api
+  ECS_CLUSTER: blick-cluster
+  ECS_SERVICE: blick-api-service
+  API_GATEWAY_ID: 1uzo5w52jk
+
+jobs:
+  DeployECS:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/aluno_22.00667-2_gha_blickapi_v2
+          role-session-name: github-action-blick-api-ecs
+
+      - name: Login no ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build e push da imagem
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -t $REGISTRY/$ECR_REPOSITORIO:latest .
+          docker push $REGISTRY/$ECR_REPOSITORIO:latest
+
+      - name: Forcar novo deployment no ECS
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --force-new-deployment \
+            --region $AWS_REGION
+
+      - name: Esperar o servico ficar estavel
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --region $AWS_REGION
+
+      - name: Descobrir o IP publico da task nova
+        id: novo-ip
+        run: |
+          TASK_ARN=$(aws ecs list-tasks --cluster $ECS_CLUSTER --service-name $ECS_SERVICE --region $AWS_REGION --query "taskArns[0]" --output text)
+          ENI_ID=$(aws ecs describe-tasks --cluster $ECS_CLUSTER --tasks "$TASK_ARN" --region $AWS_REGION --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text)
+          IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI_ID" --region $AWS_REGION --query "NetworkInterfaces[0].Association.PublicIp" --output text)
+          echo "ip=$IP" >> "$GITHUB_OUTPUT"
+          echo "Task nova no IP: $IP"
+
+      - name: Atualizar integracao do API Gateway
+        run: |
+          INTEGRATION_ID=$(aws apigatewayv2 get-integrations --api-id $API_GATEWAY_ID --region $AWS_REGION --query "Items[0].IntegrationId" --output text)
+          aws apigatewayv2 update-integration \
+            --api-id $API_GATEWAY_ID \
+            --integration-id "$INTEGRATION_ID" \
+            --integration-uri "http://${{ steps.novo-ip.outputs.ip }}:8000/{proxy}" \
+            --region $AWS_REGION
+
+      - name: Resumo do deploy
+        run: |
+          echo "### Deploy concluido :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "- Novo IP da task: ${{ steps.novo-ip.outputs.ip }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Endpoint (sem mudanca): https://$API_GATEWAY_ID.execute-api.$AWS_REGION.amazonaws.com" >> $GITHUB_STEP_SUMMARY
