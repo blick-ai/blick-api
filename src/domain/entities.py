@@ -30,6 +30,11 @@ class ClassificacaoResultado:
     probabilidades: dict[str, float]
     subtipo: Optional[str] = None
     confianca_subtipo: Optional[float] = None
+    # "modelo" (classificado de verdade) ou "filtro_enquadramento" (nem
+    # chegou a ser mandado pro modelo — barrado antes por falta de verde
+    # suficiente na imagem). Existe pra dar rastreabilidade/auditoria de
+    # quantas capturas estao caindo em cada motivo.
+    origem: str = "modelo"
 
     def to_dict(self) -> dict:
         return {
@@ -43,6 +48,7 @@ class ClassificacaoResultado:
                 Decimal(str(round(self.confianca_subtipo, 4)))
                 if self.confianca_subtipo is not None else None
             ),
+            "origem": self.origem,
         }
 
 
@@ -131,6 +137,11 @@ class Captura:
         coord = item["coordenadas"]
         jetson = item["jetson_nano"]
 
+        # itens criados ANTES da correcao do bug de serializacao (onde
+        # plantacao_id/carrinho_id nao eram gravados como campo, so
+        # embutidos na PK/GSI1PK) nao tem esses campos diretos — extrai
+        # da propria PK/GSI1PK como fallback, pra continuar lendo
+        # capturas antigas sem precisar reprocessar nada no banco
         plantacao_id = item.get("plantacao_id") or item["PK"].removeprefix("PLANT#")
         carrinho_id = item.get("carrinho_id") or item["GSI1PK"].removeprefix("CART#")
 
