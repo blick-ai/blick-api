@@ -8,6 +8,7 @@ from application.use_cases import (
     GetCapturaUseCase,
     ListCapturasUseCase,
     ListClientesUseCase,
+    ReclassificarTodasUseCase,
     SubmitCapturaUseCase,
 )
 from domain.exceptions import (
@@ -24,6 +25,7 @@ from interfaces.dependencies import (
     get_classify_pendentes_use_case,
     get_list_capturas_use_case,
     get_list_clientes_use_case,
+    get_reclassificar_todas_use_case,
     get_submit_captura_use_case,
     security,
 )
@@ -41,6 +43,7 @@ from interfaces.schemas import (
     LoginResponse,
     MessageResponse,
     PendentesResponse,
+    ReclassificarResponse,
     RecuperarSenhaRequest,
 )
 
@@ -266,6 +269,17 @@ def classificar_pendentes(
 ):
     resultado = use_case.execute(limite=limite)
     return PendentesResponse(**resultado)
+
+
+@router.post("/capturas/reclassificar-todas", response_model=ReclassificarResponse)
+def reclassificar_todas(
+    pagina: int = Query(default=1, ge=1),
+    tamanho_pagina: int = Query(default=20, ge=1, le=100, alias="tamanhoPagina"),
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: ReclassificarTodasUseCase = Depends(get_reclassificar_todas_use_case),
+):
+    resultado = use_case.execute(pagina=pagina, tamanho_pagina=tamanho_pagina)
+    return ReclassificarResponse(**resultado)
 
 
 @router.get("/clientes", response_model=ListClientesResponse)
