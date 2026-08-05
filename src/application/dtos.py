@@ -40,6 +40,7 @@ class CapturaResumoDTO:
     latitude: float
     longitude: float
     alerta_emitido: bool
+    imagem_url: Optional[str]
 
 
 @dataclass

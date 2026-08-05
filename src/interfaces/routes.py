@@ -146,6 +146,9 @@ def criar_captura(
 @router.get("/capturas", response_model=ListCapturasResponse)
 def listar_capturas(
     plantacao_id: str = Query(default="plantacao-mock-001", alias="plantacaoId"),
+    status: str | None = Query(
+        default=None, description="Filtra por PENDENTE, CLASSIFICADO ou ERRO"
+    ),
     status_geral: str | None = Query(
         default=None,
         alias="statusGeral",
@@ -164,6 +167,7 @@ def listar_capturas(
 ):
     resultado = use_case.execute(
         plantacao_id=plantacao_id,
+        status=status,
         status_geral=status_geral,
         data_inicio=data_inicio,
         data_fim=data_fim,
@@ -181,6 +185,7 @@ def listar_capturas(
                 latitude=c.latitude,
                 longitude=c.longitude,
                 alerta_emitido=c.alerta_emitido,
+                imagem_url=c.imagem_url,
             )
             for c in resultado.capturas
         ],

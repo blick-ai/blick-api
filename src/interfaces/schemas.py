@@ -34,45 +34,52 @@ class PendentesResponse(BaseModel):
 
 
 class CapturaResumoResponse(BaseModel):
-    captura_id: str
+    model_config = {"populate_by_name": True}
+
+    captura_id: str = Field(alias="capturaId")
     timestamp: str
     status: str
-    status_geral: Optional[str] = None
-    confianca_status_geral: Optional[float] = None
+    status_geral: Optional[str] = Field(default=None, alias="statusGeral")
+    confianca_status_geral: Optional[float] = Field(default=None, alias="confiancaStatusGeral")
     latitude: float
     longitude: float
-    alerta_emitido: bool
+    alerta_emitido: bool = Field(alias="alertaEmitido")
+    imagem_url: Optional[str] = Field(default=None, alias="imagemUrl")
 
 
 class ListCapturasResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
     capturas: list[CapturaResumoResponse]
     pagina: int
-    tamanho_pagina: int
+    tamanho_pagina: int = Field(alias="tamanhoPagina")
     total: int
-    total_paginas: int
+    total_paginas: int = Field(alias="totalPaginas")
 
 
 class CapturaDetalheResponse(BaseModel):
-    captura_id: str
-    plantacao_id: str
-    carrinho_id: str
-    cliente_id: str
+    model_config = {"populate_by_name": True}
+
+    captura_id: str = Field(alias="capturaId")
+    plantacao_id: str = Field(alias="plantacaoId")
+    carrinho_id: str = Field(alias="carrinhoId")
+    cliente_id: str = Field(alias="clienteId")
     timestamp: str
     status: str
     latitude: float
     longitude: float
-    status_geral: Optional[str] = None
-    confianca_status_geral: Optional[float] = None
+    status_geral: Optional[str] = Field(default=None, alias="statusGeral")
+    confianca_status_geral: Optional[float] = Field(default=None, alias="confiancaStatusGeral")
     subtipo: Optional[str] = None
-    confianca_subtipo: Optional[float] = None
+    confianca_subtipo: Optional[float] = Field(default=None, alias="confiancaSubtipo")
     probabilidades: Optional[dict] = None
-    modelo_versao_borda: str
-    confianca_borda: float
-    imagem_url: Optional[str] = None
-    status_history: list[dict]
-    erro_detalhes: Optional[str] = None
-    alerta_emitido: bool
-    alerta_emitido_em: Optional[str] = None
+    modelo_versao_borda: str = Field(alias="modeloVersaoBorda")
+    confianca_borda: float = Field(alias="confiancaBorda")
+    imagem_url: Optional[str] = Field(default=None, alias="imagemUrl")
+    status_history: list[dict] = Field(alias="statusHistory")
+    erro_detalhes: Optional[str] = Field(default=None, alias="erroDetalhes")
+    alerta_emitido: bool = Field(alias="alertaEmitido")
+    alerta_emitido_em: Optional[str] = Field(default=None, alias="alertaEmitidoEm")
 
 
 class ListClientesResponse(BaseModel):

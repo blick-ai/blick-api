@@ -166,9 +166,18 @@ class ListClientesUseCase:
         return ListClientesOutputDTO(cliente_ids=cliente_ids)
 
 
-def _resumo_de(captura: Captura) -> CapturaResumoDTO:
+def _resumo_de(captura: Captura, storage: IStorageService) -> CapturaResumoDTO:
     ia = captura.ia_nuvem or {}
     confianca_str = ia.get("confianca_status_geral")
+
+    try:
+        imagem_url = storage.generate_presigned_url(captura.s3_key)
+    except Exception:
+        # gerar a URL assinada e um calculo local (nao faz chamada de rede
+        # pro S3), mas se por algum motivo falhar, o resto do resumo ainda
+        # e util — nao derruba a listagem inteira por causa de uma imagem
+        imagem_url = None
+
     return CapturaResumoDTO(
         captura_id=captura.captura_id,
         timestamp=captura.timestamp,
@@ -178,6 +187,7 @@ def _resumo_de(captura: Captura) -> CapturaResumoDTO:
         latitude=captura.coordenadas.latitude,
         longitude=captura.coordenadas.longitude,
         alerta_emitido=captura.alerta_emitido,
+        imagem_url=imagem_url,
     )
 
 
@@ -190,12 +200,14 @@ class ListCapturasUseCase:
     pra trazer o detalhe completo de cada item (isso e o GetCapturaUseCase).
     """
 
-    def __init__(self, repository: ICapturaRepository):
+    def __init__(self, repository: ICapturaRepository, storage: IStorageService):
         self._repository = repository
+        self._storage = storage
 
     def execute(
         self,
         plantacao_id: str = MOCK_PLANTACAO_ID,
+        status: str | None = None,
         status_geral: str | None = None,
         data_inicio: str | None = None,
         data_fim: str | None = None,
@@ -204,6 +216,7 @@ class ListCapturasUseCase:
     ) -> ListCapturasOutputDTO:
         capturas, total = self._repository.list_by_plantacao(
             plantacao_id=plantacao_id,
+            status=status,
             status_geral=status_geral,
             data_inicio=data_inicio,
             data_fim=data_fim,
@@ -212,7 +225,7 @@ class ListCapturasUseCase:
         )
         total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
         return ListCapturasOutputDTO(
-            capturas=[_resumo_de(c) for c in capturas],
+            capturas=[_resumo_de(c, self._storage) for c in capturas],
             pagina=pagina,
             tamanho_pagina=tamanho_pagina,
             total=total,
