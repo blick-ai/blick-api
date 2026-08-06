@@ -44,6 +44,13 @@ class ReclassificarResponse(BaseModel):
     erros: int
 
 
+class DeletarCapturaResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    sucesso: bool
+    captura_id: str = Field(alias="capturaId")
+
+
 class CapturaResumoResponse(BaseModel):
     model_config = {"populate_by_name": True}
 

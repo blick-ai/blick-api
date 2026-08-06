@@ -10,6 +10,10 @@ class IStorageService(ABC):
         ...
 
     @abstractmethod
+    def delete_image(self, key: str) -> None:
+        ...
+
+    @abstractmethod
     def download_image(self, key: str) -> bytes:
         ...
 
@@ -21,6 +25,10 @@ class IStorageService(ABC):
 class ICapturaRepository(ABC):
     @abstractmethod
     def save(self, captura: Captura) -> None:
+        ...
+
+    @abstractmethod
+    def delete(self, plantacao_id: str, timestamp: str, captura_id: str) -> None:
         ...
 
     @abstractmethod

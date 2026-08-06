@@ -20,6 +20,9 @@ class S3StorageService(IStorageService):
         response = self._client.get_object(Bucket=self._bucket, Key=key)
         return response["Body"].read()
 
+    def delete_image(self, key: str) -> None:
+        self._client.delete_object(Bucket=self._bucket, Key=key)
+
     def generate_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         return self._client.generate_presigned_url(
             "get_object",

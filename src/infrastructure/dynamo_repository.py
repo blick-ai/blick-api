@@ -19,6 +19,11 @@ class DynamoCapturaRepository(ICapturaRepository):
         item = response.get("Item")
         return Captura.from_dynamo_item(item) if item else None
 
+    def delete(self, plantacao_id: str, timestamp: str, captura_id: str) -> None:
+        pk = f"PLANT#{plantacao_id}"
+        sk = f"CAPTURA#{timestamp}#{captura_id}"
+        self._table.delete_item(Key={"PK": pk, "SK": sk})
+
     def update(self, captura: Captura) -> None:
         # put_item sobrescreve o item inteiro — como Captura.to_dynamo_item()
         # sempre serializa o objeto completo (incluindo o que ja tinha antes,
