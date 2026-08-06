@@ -5,6 +5,7 @@ from application.dtos import CapturaInputDTO
 from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
+    DeletarCapturaUseCase,
     GetCapturaUseCase,
     ListCapturasUseCase,
     ListClientesUseCase,
@@ -23,6 +24,7 @@ from interfaces.dependencies import (
     get_captura_use_case,
     get_classify_captura_use_case,
     get_classify_pendentes_use_case,
+    get_deletar_captura_use_case,
     get_list_capturas_use_case,
     get_list_clientes_use_case,
     get_reclassificar_todas_use_case,
@@ -37,6 +39,7 @@ from interfaces.schemas import (
     CapturaResumoResponse,
     ClassificacaoResponse,
     ConfirmarCadastroRequest,
+    DeletarCapturaResponse,
     ListCapturasResponse,
     ListClientesResponse,
     LoginRequest,
@@ -233,6 +236,21 @@ def obter_captura(
         alerta_emitido=detalhe.alerta_emitido,
         alerta_emitido_em=detalhe.alerta_emitido_em,
     )
+
+
+@router.delete("/capturas/{captura_id}", response_model=DeletarCapturaResponse)
+def deletar_captura(
+    captura_id: str,
+    timestamp: str,
+    plantacao_id: str = "plantacao-mock-001",
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: DeletarCapturaUseCase = Depends(get_deletar_captura_use_case),
+):
+    excluida = use_case.execute(plantacao_id, timestamp, captura_id)
+    if not excluida:
+        raise HTTPException(status_code=404, detail="Captura não encontrada")
+
+    return DeletarCapturaResponse(sucesso=True, captura_id=captura_id)
 
 
 @router.post("/capturas/{captura_id}/classificar", response_model=ClassificacaoResponse)

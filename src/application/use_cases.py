@@ -363,3 +363,36 @@ class GetCapturaUseCase:
             alerta_emitido=captura.alerta_emitido,
             alerta_emitido_em=captura.alerta_emitido_em,
         )
+
+
+class DeletarCapturaUseCase:
+    """
+    Exclusao definitiva de uma captura — usado quando o usuario revisa o
+    detalhe e conclui que a classificacao esta errada/nao serve pra nada
+    (foto invalida, engano de captura, etc). Apaga o registro do
+    DynamoDB E a imagem do S3.
+
+    Ordem importa: apaga o banco PRIMEIRO, o S3 DEPOIS. Se a exclusao do
+    S3 falhar por algum motivo, o pior cenario e uma imagem orfa sobrando
+    no bucket (inofensivo, limpavel depois) — nunca um registro no banco
+    apontando pra uma imagem que nao existe mais (isso sim quebraria a
+    classificacao depois, com erro NoSuchKey).
+    """
+
+    def __init__(self, repository: ICapturaRepository, storage: IStorageService):
+        self._repository = repository
+        self._storage = storage
+
+    def execute(self, plantacao_id: str, timestamp: str, captura_id: str) -> bool:
+        captura = self._repository.get(plantacao_id, timestamp, captura_id)
+        if captura is None:
+            return False
+
+        self._repository.delete(plantacao_id, timestamp, captura_id)
+
+        try:
+            self._storage.delete_image(captura.s3_key)
+        except Exception:
+            pass
+
+        return True

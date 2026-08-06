@@ -6,6 +6,7 @@ from fastapi.security import HTTPBearer
 from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
+    DeletarCapturaUseCase,
     GetCapturaUseCase,
     ListCapturasUseCase,
     ListClientesUseCase,
@@ -81,6 +82,10 @@ def get_list_capturas_use_case() -> ListCapturasUseCase:
 
 def get_captura_use_case() -> GetCapturaUseCase:
     return GetCapturaUseCase(repository=get_dynamo_repository(), storage=get_s3_storage())
+
+
+def get_deletar_captura_use_case() -> DeletarCapturaUseCase:
+    return DeletarCapturaUseCase(repository=get_dynamo_repository(), storage=get_s3_storage())
 
 
 def get_list_clientes_use_case() -> ListClientesUseCase:
