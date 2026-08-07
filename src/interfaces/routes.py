@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 
 from application.dtos import CapturaInputDTO
@@ -129,8 +129,10 @@ def confirmar_cadastro(
 @router.post("/capturas", response_model=CapturaResponse, status_code=201)
 def criar_captura(
     body: CapturaRequest,
+    background_tasks: BackgroundTasks,
     cliente_id: str = Depends(get_current_cliente_id),
     use_case: SubmitCapturaUseCase = Depends(get_submit_captura_use_case),
+    classify_use_case: ClassifyCapturaUseCase = Depends(get_classify_captura_use_case),
 ):
     dto = CapturaInputDTO(
         cliente_id=cliente_id,
@@ -142,6 +144,11 @@ def criar_captura(
         confianca_borda=body.confianca_borda,
     )
     result = use_case.execute(dto)
+
+    background_tasks.add_task(
+        classify_use_case.execute, result.plantacao_id, result.timestamp, result.captura_id
+    )
+
     return CapturaResponse(
         sucesso=result.sucesso,
         captura_id=result.captura_id,

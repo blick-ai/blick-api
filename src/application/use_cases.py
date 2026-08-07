@@ -82,6 +82,8 @@ class SubmitCapturaUseCase:
             sucesso=True,
             captura_id=captura_id,
             s3_key=s3_key,
+            timestamp=timestamp,
+            plantacao_id=MOCK_PLANTACAO_ID,
         )
 
 
