@@ -18,6 +18,8 @@ class CapturaOutputDTO:
     sucesso: bool
     captura_id: str
     s3_key: str
+    timestamp: str
+    plantacao_id: str
 
 
 @dataclass
