@@ -70,6 +70,10 @@ class Captura:
     alerta_emitido: bool = False
     alerta_emitido_em: Optional[str] = None
     ttl: Optional[int] = None
+    # miniatura pequena, usada na listagem geral (ver preprocessamento_imagem.
+    # gerar_thumbnail) — capturas antigas, de antes dessa feature, nao tem
+    # esse campo; nesse caso o front recebe a imagem original mesmo
+    thumbnail_key: Optional[str] = None
 
     @property
     def pk(self) -> str:
@@ -130,6 +134,7 @@ class Captura:
             "alerta_emitido": self.alerta_emitido,
             "alerta_emitido_em": self.alerta_emitido_em,
             "ttl": self.ttl,
+            "thumbnail_key": self.thumbnail_key,
         }
 
     @staticmethod
@@ -172,4 +177,5 @@ class Captura:
             alerta_emitido=item.get("alerta_emitido", False),
             alerta_emitido_em=item.get("alerta_emitido_em"),
             ttl=item.get("ttl"),
+            thumbnail_key=item.get("thumbnail_key"),
         )
