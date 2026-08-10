@@ -53,3 +53,18 @@ def redimensionar_para_classificacao(image_bytes: bytes) -> bytes:
     # sim tem uma chance real de ainda estourar o limite em casos extremos,
     # mas e um cenario raro o suficiente pra nao valer mais complexidade aqui
     return resultado
+
+
+TAMANHO_THUMBNAIL = 300  # pixels no maior lado — suficiente pra um quadradinho de lista
+QUALIDADE_THUMBNAIL = 80
+
+
+def gerar_thumbnail(image_bytes: bytes) -> bytes:
+    try:
+        imagem = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        imagem.thumbnail((TAMANHO_THUMBNAIL, TAMANHO_THUMBNAIL))
+        buffer = io.BytesIO()
+        imagem.save(buffer, format="JPEG", quality=QUALIDADE_THUMBNAIL)
+        return buffer.getvalue()
+    except Exception:
+        return None

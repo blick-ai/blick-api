@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from application.filtro_enquadramento import possui_verde_suficiente
-from application.preprocessamento_imagem import redimensionar_para_classificacao
+from application.preprocessamento_imagem import gerar_thumbnail, redimensionar_para_classificacao
 from application.dtos import (
     CapturaDetalheDTO,
     CapturaInputDTO,
@@ -50,6 +50,19 @@ class SubmitCapturaUseCase:
 
         self._storage.upload_image(s3_key, image_bytes)
 
+        # miniatura pequena pra listagem geral — se der erro ao gerar,
+        # simplesmente nao sobe nenhuma (thumbnail_key fica None); o
+        # detalhe/classificacao usam a imagem original de qualquer forma,
+        # entao isso nunca deve travar o upload
+        thumbnail_key = None
+        thumbnail_bytes = gerar_thumbnail(image_bytes)
+        if thumbnail_bytes is not None:
+            thumbnail_key = f"{dto.cliente_id}/{ano}/{mes}/{dia}/{captura_id}_thumb.jpg"
+            try:
+                self._storage.upload_image(thumbnail_key, thumbnail_bytes)
+            except Exception:
+                thumbnail_key = None
+
         captura = Captura(
             captura_id=captura_id,
             cliente_id=dto.cliente_id,
@@ -62,6 +75,7 @@ class SubmitCapturaUseCase:
             ),
             s3_bucket=self._s3_bucket,
             s3_key=s3_key,
+            thumbnail_key=thumbnail_key,
             jetson_nano=JetsonNanoInfo(
                 planta_detectada=True,
                 confianca=dto.confianca_borda if dto.confianca_borda is not None else 0.0,
@@ -244,7 +258,12 @@ def _resumo_de(captura: Captura, storage: IStorageService) -> CapturaResumoDTO:
     confianca_str = ia.get("confianca_status_geral")
 
     try:
-        imagem_url = storage.generate_presigned_url(captura.s3_key)
+        # usa a miniatura pequena, quando existe — bem mais rapida pra
+        # carregar numa lista. Capturas antigas (de antes dessa feature)
+        # nao tem thumbnail_key, entao caem no fallback da imagem
+        # original mesmo (mais lenta, mas ainda funciona)
+        chave_imagem = captura.thumbnail_key or captura.s3_key
+        imagem_url = storage.generate_presigned_url(chave_imagem)
     except Exception:
         # gerar a URL assinada e um calculo local (nao faz chamada de rede
         # pro S3), mas se por algum motivo falhar, o resto do resumo ainda
@@ -395,6 +414,10 @@ class DeletarCapturaUseCase:
         try:
             self._storage.delete_image(captura.s3_key)
         except Exception:
+            # o registro ja foi removido do banco (o que importa pra
+            # listagem/classificacao) — uma falha aqui so deixa uma
+            # imagem orfa no S3, nao vale reverter nem falhar a
+            # exclusao inteira por causa disso
             pass
 
         return True

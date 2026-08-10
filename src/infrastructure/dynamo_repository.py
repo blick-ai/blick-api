@@ -104,23 +104,53 @@ class DynamoCapturaRepository(ICapturaRepository):
             if status:
                 kwargs["ExpressionAttributeNames"] = {"#s": "status"}
 
-        # dataset de uma plantacao de TCC e pequeno (centenas/poucos
-        # milhares de capturas) — busca tudo que bate no filtro e pagina
-        # em memoria. Simples e correto. Se um dia isso escalar pra volume
-        # bem maior, vale trocar por paginacao nativa via cursor em vez
-        # de pagina numerada (que exige varrer do inicio a cada consulta).
-        todas = []
-        while True:
+        # ANTES: buscava TODAS as capturas da plantacao (mesmo pra
+        # mostrar so 8), sempre, em toda chamada — ficava mais lento a
+        # cada captura nova, ate em paginas iniciais.
+        #
+        # AGORA: para assim que ja tem itens suficientes pra pagina
+        # pedida (pagina 1 = so precisa de 8, nao de 1000+). O "total"
+        # vem de uma consulta separada com Select=COUNT, que o DynamoDB
+        # calcula sem precisar transferir/processar o conteudo de cada
+        # item — bem mais barato que ler tudo so pra contar.
+        itens_necessarios = pagina * tamanho_pagina
+        coletadas = []
+        while len(coletadas) < itens_necessarios:
             response = self._table.query(**kwargs)
-            todas.extend(Captura.from_dynamo_item(item) for item in response.get("Items", []))
+            coletadas.extend(Captura.from_dynamo_item(item) for item in response.get("Items", []))
             if "LastEvaluatedKey" not in response:
                 break
             kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
-        total = len(todas)
         inicio_idx = (pagina - 1) * tamanho_pagina
-        capturas_da_pagina = todas[inicio_idx: inicio_idx + tamanho_pagina]
+        capturas_da_pagina = coletadas[inicio_idx: inicio_idx + tamanho_pagina]
+
+        total = self._contar_total(
+            key_condition, expr_values,
+            kwargs.get("FilterExpression"), kwargs.get("ExpressionAttributeNames"),
+        )
+
         return capturas_da_pagina, total
+
+    def _contar_total(self, key_condition, expr_values, filter_expression, expr_names):
+        kwargs = {
+            "KeyConditionExpression": key_condition,
+            "ExpressionAttributeValues": expr_values,
+            "Select": "COUNT",
+        }
+        if filter_expression:
+            kwargs["FilterExpression"] = filter_expression
+        if expr_names:
+            kwargs["ExpressionAttributeNames"] = expr_names
+
+        total = 0
+        while True:
+            response = self._table.query(**kwargs)
+            total += response["Count"]
+            if "LastEvaluatedKey" not in response:
+                break
+            kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+        return total
 
     def list_cliente_ids(self) -> list[str]:
         cliente_ids: set[str] = set()
