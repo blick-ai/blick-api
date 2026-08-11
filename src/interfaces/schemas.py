@@ -44,6 +44,18 @@ class ReclassificarResponse(BaseModel):
     erros: int
 
 
+class ThumbnailsResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    pagina: int
+    tamanho_pagina: int = Field(alias="tamanhoPagina")
+    total: int
+    total_paginas: int = Field(alias="totalPaginas")
+    processadas: int
+    ja_tinham: int = Field(alias="jaTinham")
+    erros: int
+
+
 class DeletarCapturaResponse(BaseModel):
     model_config = {"populate_by_name": True}
 

@@ -421,3 +421,52 @@ class DeletarCapturaUseCase:
             pass
 
         return True
+
+
+class GerarThumbnailsUseCase:
+    def __init__(self, repository: ICapturaRepository, storage: IStorageService):
+        self._repository = repository
+        self._storage = storage
+
+    def execute(
+        self,
+        plantacao_id: str = MOCK_PLANTACAO_ID,
+        pagina: int = 1,
+        tamanho_pagina: int = 20,
+    ) -> dict:
+        capturas, total = self._repository.list_by_plantacao(
+            plantacao_id=plantacao_id, pagina=pagina, tamanho_pagina=tamanho_pagina
+        )
+        processadas, ja_tinham, erros = 0, 0, 0
+
+        for captura in capturas:
+            if captura.thumbnail_key:
+                ja_tinham += 1
+                continue
+
+            try:
+                image_bytes = self._storage.download_image(captura.s3_key)
+                thumbnail_bytes = gerar_thumbnail(image_bytes)
+                if thumbnail_bytes is None:
+                    erros += 1
+                    continue
+
+                thumbnail_key = captura.s3_key.rsplit(".", 1)[0] + "_thumb.jpg"
+                self._storage.upload_image(thumbnail_key, thumbnail_bytes)
+
+                captura.thumbnail_key = thumbnail_key
+                self._repository.update(captura)
+                processadas += 1
+            except Exception:
+                erros += 1
+
+        total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
+        return {
+            "pagina": pagina,
+            "tamanho_pagina": tamanho_pagina,
+            "total": total,
+            "total_paginas": total_paginas,
+            "processadas": processadas,
+            "ja_tinham": ja_tinham,
+            "erros": erros,
+        }
