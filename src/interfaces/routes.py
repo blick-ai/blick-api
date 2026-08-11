@@ -6,6 +6,7 @@ from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
     DeletarCapturaUseCase,
+    GerarThumbnailsUseCase,
     GetCapturaUseCase,
     ListCapturasUseCase,
     ListClientesUseCase,
@@ -25,6 +26,7 @@ from interfaces.dependencies import (
     get_classify_captura_use_case,
     get_classify_pendentes_use_case,
     get_deletar_captura_use_case,
+    get_gerar_thumbnails_use_case,
     get_list_capturas_use_case,
     get_list_clientes_use_case,
     get_reclassificar_todas_use_case,
@@ -48,6 +50,7 @@ from interfaces.schemas import (
     PendentesResponse,
     ReclassificarResponse,
     RecuperarSenhaRequest,
+    ThumbnailsResponse,
 )
 
 router = APIRouter()
@@ -145,6 +148,12 @@ def criar_captura(
     )
     result = use_case.execute(dto)
 
+    # classifica em segundo plano, sem fazer o cliente esperar — a
+    # resposta do upload volta na hora, e a classificacao acontece logo
+    # em seguida, no mesmo container, sem precisar de infraestrutura
+    # nova (sem EventBridge/Lambda/polling). Se a classificacao falhar,
+    # a captura so fica com status ERRO — o upload em si ja e garantido,
+    # nunca se perde por causa de uma falha na classificacao.
     background_tasks.add_task(
         classify_use_case.execute, result.plantacao_id, result.timestamp, result.captura_id
     )
@@ -305,6 +314,17 @@ def reclassificar_todas(
 ):
     resultado = use_case.execute(pagina=pagina, tamanho_pagina=tamanho_pagina)
     return ReclassificarResponse(**resultado)
+
+
+@router.post("/capturas/gerar-thumbnails", response_model=ThumbnailsResponse)
+def gerar_thumbnails(
+    pagina: int = Query(default=1, ge=1),
+    tamanho_pagina: int = Query(default=20, ge=1, le=100, alias="tamanhoPagina"),
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: GerarThumbnailsUseCase = Depends(get_gerar_thumbnails_use_case),
+):
+    resultado = use_case.execute(pagina=pagina, tamanho_pagina=tamanho_pagina)
+    return ThumbnailsResponse(**resultado)
 
 
 @router.get("/clientes", response_model=ListClientesResponse)
