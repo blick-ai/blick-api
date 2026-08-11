@@ -1,3 +1,5 @@
+import concurrent.futures
+
 import boto3
 
 from domain.entities import Captura
@@ -106,29 +108,40 @@ class DynamoCapturaRepository(ICapturaRepository):
 
         # ANTES: buscava TODAS as capturas da plantacao (mesmo pra
         # mostrar so 8), sempre, em toda chamada — ficava mais lento a
-        # cada captura nova, ate em paginas iniciais.
+        # cada captura nova, ate em paginas iniciais. Corrigido ontem
+        # (para assim que tem itens suficientes pra pagina pedida).
         #
-        # AGORA: para assim que ja tem itens suficientes pra pagina
-        # pedida (pagina 1 = so precisa de 8, nao de 1000+). O "total"
-        # vem de uma consulta separada com Select=COUNT, que o DynamoDB
-        # calcula sem precisar transferir/processar o conteudo de cada
-        # item — bem mais barato que ler tudo so pra contar.
+        # MAS: a contagem do total (pro "1096 resultados" da paginacao)
+        # continuava rodando numa consulta SEPARADA, DEPOIS da coleta —
+        # sequencial, dobrando o tempo total mesmo com as duas consultas
+        # sendo independentes uma da outra. Agora rodam em PARALELO
+        # (thread separada pra cada), cortando o tempo pela metade.
         itens_necessarios = pagina * tamanho_pagina
-        coletadas = []
-        while len(coletadas) < itens_necessarios:
-            response = self._table.query(**kwargs)
-            coletadas.extend(Captura.from_dynamo_item(item) for item in response.get("Items", []))
-            if "LastEvaluatedKey" not in response:
-                break
-            kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+
+        def _coletar_pagina():
+            coletadas = []
+            kwargs_local = dict(kwargs)
+            while len(coletadas) < itens_necessarios:
+                response = self._table.query(**kwargs_local)
+                coletadas.extend(
+                    Captura.from_dynamo_item(item) for item in response.get("Items", [])
+                )
+                if "LastEvaluatedKey" not in response:
+                    break
+                kwargs_local["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+            return coletadas
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            futuro_dados = executor.submit(_coletar_pagina)
+            futuro_total = executor.submit(
+                self._contar_total, key_condition, expr_values,
+                kwargs.get("FilterExpression"), kwargs.get("ExpressionAttributeNames"),
+            )
+            coletadas = futuro_dados.result()
+            total = futuro_total.result()
 
         inicio_idx = (pagina - 1) * tamanho_pagina
         capturas_da_pagina = coletadas[inicio_idx: inicio_idx + tamanho_pagina]
-
-        total = self._contar_total(
-            key_condition, expr_values,
-            kwargs.get("FilterExpression"), kwargs.get("ExpressionAttributeNames"),
-        )
 
         return capturas_da_pagina, total
 
