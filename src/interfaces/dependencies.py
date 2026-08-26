@@ -7,6 +7,7 @@ from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
     DeletarCapturaUseCase,
+    BackfillOrigemUseCase,
     GerarThumbnailsUseCase,
     GetCapturaUseCase,
     ListCapturasUseCase,
@@ -91,6 +92,10 @@ def get_gerar_thumbnails_use_case() -> GerarThumbnailsUseCase:
         repository=get_dynamo_repository(),
         storage=get_s3_storage(),
     )
+
+
+def get_backfill_origem_use_case() -> BackfillOrigemUseCase:
+    return BackfillOrigemUseCase(repository=get_dynamo_repository())
 
 
 def get_list_capturas_use_case() -> ListCapturasUseCase:

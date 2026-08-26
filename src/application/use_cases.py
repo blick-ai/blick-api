@@ -574,3 +574,53 @@ class GerarThumbnailsUseCase:
             "ja_tinham": ja_tinham,
             "erros": erros,
         }
+
+
+class BackfillOrigemUseCase:
+    """
+    Backfill: escreve o campo "origem" explicitamente em capturas
+    ANTIGAS, de antes desse campo existir.
+
+    Sem isso, o campo so e "assumido" como rover na LEITURA em Python
+    (Captura.from_dynamo_item cai em origem="rover" quando o atributo
+    nao existe no item bruto) — mas esse fallback nao vale pro FILTRO
+    que o proprio DynamoDB faz (FilterExpression roda nos dados brutos,
+    antes do Python ver o item). Isso fazia "origem=rover" na listagem
+    NAO encontrar essas capturas antigas, mesmo sendo rover de verdade.
+
+    E seguro rodar em qualquer captura, inclusive repetidamente: so
+    reler e regravar cada item ja materializa o valor certo (manual
+    continua manual, rover — explicito ou assumido — vira rover
+    gravado de verdade).
+    """
+
+    def __init__(self, repository: ICapturaRepository):
+        self._repository = repository
+
+    def execute(
+        self,
+        plantacao_id: str = MOCK_PLANTACAO_ID,
+        pagina: int = 1,
+        tamanho_pagina: int = 50,
+    ) -> dict:
+        capturas, total = self._repository.list_by_plantacao(
+            plantacao_id=plantacao_id, pagina=pagina, tamanho_pagina=tamanho_pagina
+        )
+        processadas, erros = 0, 0
+
+        for captura in capturas:
+            try:
+                self._repository.update(captura)
+                processadas += 1
+            except Exception:
+                erros += 1
+
+        total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
+        return {
+            "pagina": pagina,
+            "tamanho_pagina": tamanho_pagina,
+            "total": total,
+            "total_paginas": total_paginas,
+            "processadas": processadas,
+            "erros": erros,
+        }
