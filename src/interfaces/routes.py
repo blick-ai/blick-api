@@ -210,6 +210,10 @@ def listar_capturas(
         alias="statusGeral",
         description="Filtra por saudavel, praga, doenca ou nao_milho",
     ),
+    origem: str | None = Query(
+        default=None,
+        description="Filtra por origem da captura: rover ou manual",
+    ),
     data_inicio: str | None = Query(
         default=None, alias="dataInicio", description="Formato YYYY-MM-DD, inclusive"
     ),
@@ -225,6 +229,7 @@ def listar_capturas(
         plantacao_id=plantacao_id,
         status=status,
         status_geral=status_geral,
+        origem=origem,
         data_inicio=data_inicio,
         data_fim=data_fim,
         pagina=pagina,
@@ -242,6 +247,7 @@ def listar_capturas(
                 longitude=c.longitude,
                 alerta_emitido=c.alerta_emitido,
                 imagem_url=c.imagem_url,
+                origem=c.origem,
             )
             for c in resultado.capturas
         ],
@@ -284,6 +290,7 @@ def obter_captura(
         status_history=detalhe.status_history,
         erro_detalhes=detalhe.erro_detalhes,
         alerta_emitido=detalhe.alerta_emitido,
+        origem=detalhe.origem,
         alerta_emitido_em=detalhe.alerta_emitido_em,
     )
 

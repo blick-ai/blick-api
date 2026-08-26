@@ -51,6 +51,7 @@ class ICapturaRepository(ABC):
         plantacao_id: str,
         status: Optional[str] = None,
         status_geral: Optional[str] = None,
+        origem: Optional[str] = None,
         data_inicio: Optional[str] = None,
         data_fim: Optional[str] = None,
         pagina: int = 1,
