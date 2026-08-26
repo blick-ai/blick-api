@@ -3,12 +3,17 @@ import uuid
 from datetime import datetime
 
 from application.filtro_enquadramento import possui_verde_suficiente
-from application.preprocessamento_imagem import gerar_thumbnail, redimensionar_para_classificacao
+from application.preprocessamento_imagem import (
+    extrair_timestamp_exif,
+    gerar_thumbnail,
+    redimensionar_para_classificacao,
+)
 from application.dtos import (
     CapturaDetalheDTO,
     CapturaInputDTO,
     CapturaOutputDTO,
     CapturaResumoDTO,
+    CapturaSimplesInputDTO,
     ListCapturasOutputDTO,
     ListClientesOutputDTO,
 )
@@ -88,6 +93,88 @@ class SubmitCapturaUseCase:
             ),
             status="PENDENTE",
             status_history=[StatusEntry(status="PENDENTE", timestamp=timestamp)],
+            origem="rover",  # explicito de proposito — nao depende do valor padrao da classe
+        )
+
+        self._repository.save(captura)
+
+        return CapturaOutputDTO(
+            sucesso=True,
+            captura_id=captura_id,
+            s3_key=s3_key,
+            timestamp=timestamp,
+            plantacao_id=MOCK_PLANTACAO_ID,
+        )
+
+
+class SubmitCapturaSimplesUseCase:
+    """
+    Upload manual simplificado — recebe SO a foto, sem data nem
+    coordenadas. O timestamp vem do EXIF da propria imagem (quando a
+    foto foi tirada de verdade); se a foto nao tiver esse metadado
+    (screenshot, imagem que passou por app que remove EXIF, etc.), usa
+    a hora atual do servidor como substituto.
+
+    Coordenadas ficam vazias de proposito — quem faz upload manual ja
+    sabe onde tirou a foto, nao faz sentido pedir isso no formulario
+    (e providenciar via Google Maps foi removido justamente por causa
+    disso).
+    """
+
+    def __init__(
+        self,
+        storage: IStorageService,
+        repository: ICapturaRepository,
+        s3_bucket: str,
+    ):
+        self._storage = storage
+        self._repository = repository
+        self._s3_bucket = s3_bucket
+
+    def execute(self, dto: CapturaSimplesInputDTO) -> CapturaOutputDTO:
+        image_bytes = base64.b64decode(dto.imagem_base64)
+
+        timestamp_exif = extrair_timestamp_exif(image_bytes)
+        if timestamp_exif is not None:
+            momento = datetime.strptime(timestamp_exif, "%Y-%m-%dT%H:%M:%SZ")
+        else:
+            momento = datetime.utcnow()
+        timestamp = momento.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        short_uuid = uuid.uuid4().hex[:8]
+        captura_id = f"{momento.strftime('%Y%m%d%H%M%S')}-{short_uuid}"
+        dia, mes, ano = momento.strftime("%d"), momento.strftime("%m"), momento.strftime("%Y")
+        s3_key = f"{dto.cliente_id}/{ano}/{mes}/{dia}/{captura_id}.jpg"
+
+        self._storage.upload_image(s3_key, image_bytes)
+
+        thumbnail_key = None
+        thumbnail_bytes = gerar_thumbnail(image_bytes)
+        if thumbnail_bytes is not None:
+            thumbnail_key = f"{dto.cliente_id}/{ano}/{mes}/{dia}/{captura_id}_thumb.jpg"
+            try:
+                self._storage.upload_image(thumbnail_key, thumbnail_bytes)
+            except Exception:
+                thumbnail_key = None
+
+        captura = Captura(
+            captura_id=captura_id,
+            cliente_id=dto.cliente_id,
+            plantacao_id=MOCK_PLANTACAO_ID,
+            carrinho_id=MOCK_CARRINHO_ID,
+            timestamp=timestamp,
+            coordenadas=Coordenadas(latitude=None, longitude=None),
+            s3_bucket=self._s3_bucket,
+            s3_key=s3_key,
+            thumbnail_key=thumbnail_key,
+            jetson_nano=JetsonNanoInfo(
+                planta_detectada=True,
+                confianca=0.0,
+                modelo_versao="upload-manual",
+            ),
+            status="PENDENTE",
+            status_history=[StatusEntry(status="PENDENTE", timestamp=timestamp)],
+            origem="manual",
         )
 
         self._repository.save(captura)
@@ -280,6 +367,7 @@ def _resumo_de(captura: Captura, storage: IStorageService) -> CapturaResumoDTO:
         longitude=captura.coordenadas.longitude,
         alerta_emitido=captura.alerta_emitido,
         imagem_url=imagem_url,
+        origem=captura.origem,
     )
 
 
@@ -382,6 +470,7 @@ class GetCapturaUseCase:
             ],
             erro_detalhes=captura.erro_detalhes,
             alerta_emitido=captura.alerta_emitido,
+            origem=captura.origem,
             alerta_emitido_em=captura.alerta_emitido_em,
         )
 
@@ -424,6 +513,19 @@ class DeletarCapturaUseCase:
 
 
 class GerarThumbnailsUseCase:
+    """
+    Backfill: gera a miniatura pequena (ver preprocessamento_imagem.
+    gerar_thumbnail) pras capturas ANTIGAS que nao tem thumbnail_key —
+    ou seja, tudo que foi enviado antes dessa feature existir. Sem isso,
+    essas capturas continuam usando a imagem original (varios MB) na
+    listagem geral pra sempre, mesmo com a otimizacao ja no ar.
+
+    Mesma logica de paginacao explicita do ReclassificarTodasUseCase —
+    o conjunto "sem thumbnail" encolhe conforme processa, mas ainda assim
+    usa paginas numeradas por simplicidade e consistencia com o resto da
+    API.
+    """
+
     def __init__(self, repository: ICapturaRepository, storage: IStorageService):
         self._repository = repository
         self._storage = storage

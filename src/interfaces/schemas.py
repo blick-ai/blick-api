@@ -13,6 +13,11 @@ class CapturaRequest(BaseModel):
     confianca_borda: Optional[float] = None
 
 
+class CapturaSimplesRequest(BaseModel):
+    """Upload manual simplificado — só a foto, nada mais."""
+    imagem_base64: str = Field(..., min_length=1)
+
+
 class CapturaResponse(BaseModel):
     sucesso: bool
     captura_id: str
@@ -71,10 +76,11 @@ class CapturaResumoResponse(BaseModel):
     status: str
     status_geral: Optional[str] = Field(default=None, alias="statusGeral")
     confianca_status_geral: Optional[float] = Field(default=None, alias="confiancaStatusGeral")
-    latitude: float
-    longitude: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     alerta_emitido: bool = Field(alias="alertaEmitido")
     imagem_url: Optional[str] = Field(default=None, alias="imagemUrl")
+    origem: str = "rover"
 
 
 class ListCapturasResponse(BaseModel):
@@ -96,8 +102,8 @@ class CapturaDetalheResponse(BaseModel):
     cliente_id: str = Field(alias="clienteId")
     timestamp: str
     status: str
-    latitude: float
-    longitude: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     status_geral: Optional[str] = Field(default=None, alias="statusGeral")
     confianca_status_geral: Optional[float] = Field(default=None, alias="confiancaStatusGeral")
     subtipo: Optional[str] = None
@@ -109,6 +115,7 @@ class CapturaDetalheResponse(BaseModel):
     status_history: list[dict] = Field(alias="statusHistory")
     erro_detalhes: Optional[str] = Field(default=None, alias="erroDetalhes")
     alerta_emitido: bool = Field(alias="alertaEmitido")
+    origem: str = "rover"
     alerta_emitido_em: Optional[str] = Field(default=None, alias="alertaEmitidoEm")
 
 

@@ -1,6 +1,7 @@
 import io
+from datetime import datetime
 
-from PIL import Image
+from PIL import ExifTags, Image
 
 # limite REAL e rigido do SageMaker Serverless Inference: 4 MB de payload,
 # sem excecao, nao da pra configurar (fonte: docs.aws.amazon.com/sagemaker/
@@ -60,11 +61,64 @@ QUALIDADE_THUMBNAIL = 80
 
 
 def gerar_thumbnail(image_bytes: bytes) -> bytes:
+    """
+    Gera uma miniatura pequena pra usar na LISTAGEM geral — sem isso, o
+    front baixa a foto em resolucao original (varios MB, comum em fotos
+    de celular) so pra mostrar um quadradinho de 64px, desperdicando
+    banda e deixando a lista lenta pra carregar. A foto original continua
+    intacta no S3, usada normalmente no detalhe/classificacao — isso aqui
+    e so uma copia extra, menor, pensada exclusivamente pra exibicao.
+
+    Se der qualquer erro ao processar, devolve None — nesse caso o
+    chamador deve usar a imagem original mesmo (fallback), em vez de
+    travar o upload por causa de uma miniatura que nao e essencial.
+    """
     try:
         imagem = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         imagem.thumbnail((TAMANHO_THUMBNAIL, TAMANHO_THUMBNAIL))
         buffer = io.BytesIO()
         imagem.save(buffer, format="JPEG", quality=QUALIDADE_THUMBNAIL)
         return buffer.getvalue()
+    except Exception:
+        return None
+
+
+def extrair_timestamp_exif(image_bytes: bytes) -> str | None:
+    """
+    Le a data/hora em que a foto foi tirada de verdade, a partir dos
+    metadados EXIF — usado no upload manual (sem data digitada pelo
+    usuario, a foto ja carrega isso sozinha).
+
+    Tenta primeiro a tag "DateTimeOriginal" (0x9003, na Exif SubIFD —
+    e o campo correto/padrao pra "momento do disparo"), e cai pra
+    "DateTime" (0x0132, no IFD principal) como alternativa mais simples
+    se a primeira nao existir.
+
+    Retorna None se a foto nao tiver EXIF nenhum (comum em screenshots,
+    ou fotos que passaram por apps de mensagem que removem metadados) —
+    nesse caso, quem chama deve usar a hora atual do servidor como
+    substituto, em vez de travar o upload.
+    """
+    try:
+        imagem = Image.open(io.BytesIO(image_bytes))
+        exif = imagem.getexif()
+        if not exif:
+            return None
+
+        bruto = None
+        try:
+            sub_ifd = exif.get_ifd(ExifTags.IFD.Exif)
+            bruto = sub_ifd.get(0x9003)  # DateTimeOriginal
+        except Exception:
+            pass
+
+        if not bruto:
+            bruto = exif.get(0x0132)  # DateTime (fallback mais simples)
+
+        if not bruto:
+            return None
+
+        momento = datetime.strptime(bruto, "%Y:%m:%d %H:%M:%S")
+        return momento.strftime("%Y-%m-%dT%H:%M:%SZ")
     except Exception:
         return None

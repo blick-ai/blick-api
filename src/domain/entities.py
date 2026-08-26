@@ -5,8 +5,8 @@ from typing import Optional
 
 @dataclass
 class Coordenadas:
-    latitude: float
-    longitude: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 @dataclass
@@ -74,6 +74,12 @@ class Captura:
     # gerar_thumbnail) — capturas antigas, de antes dessa feature, nao tem
     # esse campo; nesse caso o front recebe a imagem original mesmo
     thumbnail_key: Optional[str] = None
+    # "rover" (Klar, com GPS) ou "manual" (upload direto de foto, sem
+    # coordenadas — o timestamp vem do EXIF da propria foto). Capturas
+    # antigas (de antes desse campo existir) nao tem isso gravado — nesse
+    # caso o padrao "rover" e o correto, ja que TODAS as capturas de
+    # antes vieram do carrinho mesmo.
+    origem: str = "rover"
 
     @property
     def pk(self) -> str:
@@ -113,8 +119,14 @@ class Captura:
             "plantacao_id": self.plantacao_id,
             "carrinho_id": self.carrinho_id,
             "coordenadas": {
-                "latitude": Decimal(str(self.coordenadas.latitude)),
-                "longitude": Decimal(str(self.coordenadas.longitude)),
+                "latitude": (
+                    Decimal(str(self.coordenadas.latitude))
+                    if self.coordenadas.latitude is not None else None
+                ),
+                "longitude": (
+                    Decimal(str(self.coordenadas.longitude))
+                    if self.coordenadas.longitude is not None else None
+                ),
             },
             "s3_bucket": self.s3_bucket,
             "s3_key": self.s3_key,
@@ -135,6 +147,7 @@ class Captura:
             "alerta_emitido_em": self.alerta_emitido_em,
             "ttl": self.ttl,
             "thumbnail_key": self.thumbnail_key,
+            "origem": self.origem,
         }
 
     @staticmethod
@@ -157,8 +170,8 @@ class Captura:
             carrinho_id=carrinho_id,
             timestamp=item["timestamp"],
             coordenadas=Coordenadas(
-                latitude=float(coord["latitude"]),
-                longitude=float(coord["longitude"]),
+                latitude=float(coord["latitude"]) if coord.get("latitude") is not None else None,
+                longitude=float(coord["longitude"]) if coord.get("longitude") is not None else None,
             ),
             s3_bucket=item["s3_bucket"],
             s3_key=item["s3_key"],
@@ -178,4 +191,5 @@ class Captura:
             alerta_emitido_em=item.get("alerta_emitido_em"),
             ttl=item.get("ttl"),
             thumbnail_key=item.get("thumbnail_key"),
+            origem=item.get("origem", "rover"),
         )

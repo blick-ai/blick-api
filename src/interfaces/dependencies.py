@@ -12,6 +12,7 @@ from application.use_cases import (
     ListCapturasUseCase,
     ListClientesUseCase,
     ReclassificarTodasUseCase,
+    SubmitCapturaSimplesUseCase,
     SubmitCapturaUseCase,
 )
 from infrastructure.cognito_auth import CognitoAuthService
@@ -49,6 +50,14 @@ def get_classification_service() -> SageMakerClassificationService:
 
 def get_submit_captura_use_case() -> SubmitCapturaUseCase:
     return SubmitCapturaUseCase(
+        storage=get_s3_storage(),
+        repository=get_dynamo_repository(),
+        s3_bucket=S3_BUCKET_NAME,
+    )
+
+
+def get_submit_captura_simples_use_case() -> SubmitCapturaSimplesUseCase:
+    return SubmitCapturaSimplesUseCase(
         storage=get_s3_storage(),
         repository=get_dynamo_repository(),
         s3_bucket=S3_BUCKET_NAME,
