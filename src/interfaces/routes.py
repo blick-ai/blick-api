@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 
-from application.dtos import CapturaInputDTO
+from application.dtos import CapturaInputDTO, CapturaSimplesInputDTO
 from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
@@ -11,6 +11,7 @@ from application.use_cases import (
     ListCapturasUseCase,
     ListClientesUseCase,
     ReclassificarTodasUseCase,
+    SubmitCapturaSimplesUseCase,
     SubmitCapturaUseCase,
 )
 from domain.exceptions import (
@@ -30,6 +31,7 @@ from interfaces.dependencies import (
     get_list_capturas_use_case,
     get_list_clientes_use_case,
     get_reclassificar_todas_use_case,
+    get_submit_captura_simples_use_case,
     get_submit_captura_use_case,
     security,
 )
@@ -39,6 +41,7 @@ from interfaces.schemas import (
     CapturaRequest,
     CapturaResponse,
     CapturaResumoResponse,
+    CapturaSimplesRequest,
     ClassificacaoResponse,
     ConfirmarCadastroRequest,
     DeletarCapturaResponse,
@@ -154,6 +157,37 @@ def criar_captura(
     # nova (sem EventBridge/Lambda/polling). Se a classificacao falhar,
     # a captura so fica com status ERRO — o upload em si ja e garantido,
     # nunca se perde por causa de uma falha na classificacao.
+    background_tasks.add_task(
+        classify_use_case.execute, result.plantacao_id, result.timestamp, result.captura_id
+    )
+
+    return CapturaResponse(
+        sucesso=result.sucesso,
+        captura_id=result.captura_id,
+        s3_key=result.s3_key,
+    )
+
+
+@router.post("/capturas/upload-simples", response_model=CapturaResponse, status_code=201)
+def criar_captura_simples(
+    body: CapturaSimplesRequest,
+    background_tasks: BackgroundTasks,
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: SubmitCapturaSimplesUseCase = Depends(get_submit_captura_simples_use_case),
+    classify_use_case: ClassifyCapturaUseCase = Depends(get_classify_captura_use_case),
+):
+    """
+    Upload manual simplificado — so a foto, sem data nem coordenadas.
+    Usado pelo botao "Carregar Captura" do dashboard. O timestamp vem do
+    EXIF da propria imagem (com fallback pra hora atual do servidor se a
+    foto nao tiver esse metadado).
+    """
+    dto = CapturaSimplesInputDTO(
+        cliente_id=cliente_id,
+        imagem_base64=body.imagem_base64,
+    )
+    result = use_case.execute(dto)
+
     background_tasks.add_task(
         classify_use_case.execute, result.plantacao_id, result.timestamp, result.captura_id
     )

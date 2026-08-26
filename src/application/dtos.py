@@ -14,6 +14,17 @@ class CapturaInputDTO:
 
 
 @dataclass
+class CapturaSimplesInputDTO:
+    """
+    Entrada do upload manual simplificado — so a foto, nada mais. Sem
+    data (vem do EXIF da propria imagem) e sem coordenadas (upload
+    manual nao tem GPS; o dono da foto ja sabe onde tirou).
+    """
+    cliente_id: str
+    imagem_base64: str
+
+
+@dataclass
 class CapturaOutputDTO:
     sucesso: bool
     captura_id: str
@@ -39,10 +50,11 @@ class CapturaResumoDTO:
     status: str
     status_geral: Optional[str]
     confianca_status_geral: Optional[float]
-    latitude: float
-    longitude: float
+    latitude: Optional[float]
+    longitude: Optional[float]
     alerta_emitido: bool
     imagem_url: Optional[str]
+    origem: str
 
 
 @dataclass
@@ -63,8 +75,8 @@ class CapturaDetalheDTO:
     cliente_id: str
     timestamp: str
     status: str
-    latitude: float
-    longitude: float
+    latitude: Optional[float]
+    longitude: Optional[float]
     status_geral: Optional[str]
     confianca_status_geral: Optional[float]
     subtipo: Optional[str]
@@ -76,6 +88,7 @@ class CapturaDetalheDTO:
     status_history: list[dict]
     erro_detalhes: Optional[str]
     alerta_emitido: bool
+    origem: str
     alerta_emitido_em: Optional[str]
 
 
