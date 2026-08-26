@@ -61,6 +61,17 @@ class ThumbnailsResponse(BaseModel):
     erros: int
 
 
+class BackfillOrigemResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    pagina: int
+    tamanho_pagina: int = Field(alias="tamanhoPagina")
+    total: int
+    total_paginas: int = Field(alias="totalPaginas")
+    processadas: int
+    erros: int
+
+
 class DeletarCapturaResponse(BaseModel):
     model_config = {"populate_by_name": True}
 

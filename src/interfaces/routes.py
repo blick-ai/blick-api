@@ -6,6 +6,7 @@ from application.use_cases import (
     ClassifyCapturaUseCase,
     ClassifyPendentesUseCase,
     DeletarCapturaUseCase,
+    BackfillOrigemUseCase,
     GerarThumbnailsUseCase,
     GetCapturaUseCase,
     ListCapturasUseCase,
@@ -27,6 +28,7 @@ from interfaces.dependencies import (
     get_classify_captura_use_case,
     get_classify_pendentes_use_case,
     get_deletar_captura_use_case,
+    get_backfill_origem_use_case,
     get_gerar_thumbnails_use_case,
     get_list_capturas_use_case,
     get_list_clientes_use_case,
@@ -53,6 +55,7 @@ from interfaces.schemas import (
     PendentesResponse,
     ReclassificarResponse,
     RecuperarSenhaRequest,
+    BackfillOrigemResponse,
     ThumbnailsResponse,
 )
 
@@ -366,6 +369,23 @@ def gerar_thumbnails(
 ):
     resultado = use_case.execute(pagina=pagina, tamanho_pagina=tamanho_pagina)
     return ThumbnailsResponse(**resultado)
+
+
+@router.post("/capturas/backfill-origem", response_model=BackfillOrigemResponse)
+def backfill_origem(
+    pagina: int = Query(default=1, ge=1),
+    tamanho_pagina: int = Query(default=50, ge=1, le=100, alias="tamanhoPagina"),
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: BackfillOrigemUseCase = Depends(get_backfill_origem_use_case),
+):
+    """
+    Roda uma vez so: grava o campo "origem" explicitamente em capturas
+    antigas que nao tem esse campo (ver BackfillOrigemUseCase pro motivo
+    detalhado — sem isso, o filtro ?origem=rover nao encontra capturas
+    de antes dessa feature existir).
+    """
+    resultado = use_case.execute(pagina=pagina, tamanho_pagina=tamanho_pagina)
+    return BackfillOrigemResponse(**resultado)
 
 
 @router.get("/clientes", response_model=ListClientesResponse)
