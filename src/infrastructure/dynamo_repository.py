@@ -64,6 +64,7 @@ class DynamoCapturaRepository(ICapturaRepository):
         plantacao_id: str,
         status: str | None = None,
         status_geral: str | None = None,
+        origem: str | None = None,
         data_inicio: str | None = None,
         data_fim: str | None = None,
         pagina: int = 1,
@@ -100,6 +101,10 @@ class DynamoCapturaRepository(ICapturaRepository):
             # no campo aninhado sem precisar de indice novo
             filtros.append("ia_nuvem.status_geral = :sg")
             expr_values[":sg"] = status_geral
+        if origem:
+            # "origem" nao e palavra reservada, filtra direto sem alias
+            filtros.append("origem = :origem")
+            expr_values[":origem"] = origem
 
         if filtros:
             kwargs["FilterExpression"] = " AND ".join(filtros)
