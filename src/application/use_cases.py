@@ -24,7 +24,13 @@ from domain.entities import (
     JetsonNanoInfo,
     StatusEntry,
 )
-from domain.ports import ICapturaRepository, IClassificationService, IStorageService
+from domain.ports import (
+    ICapturaRepository,
+    IClassificationService,
+    IEmailService,
+    IStorageService,
+    IUserLookupService,
+)
 
 MOCK_PLANTACAO_ID = "plantacao-mock-001"
 MOCK_CARRINHO_ID = "carrinho-mock-001"
@@ -203,10 +209,18 @@ class ClassifyCapturaUseCase:
         repository: ICapturaRepository,
         storage: IStorageService,
         classifier: IClassificationService,
+        email_service: IEmailService | None = None,
+        user_lookup: IUserLookupService | None = None,
     ):
         self._repository = repository
         self._storage = storage
         self._classifier = classifier
+        # os dois de baixo sao opcionais de proposito — se nao forem
+        # passados, o aviso por email simplesmente nao dispara, sem
+        # quebrar quem ja cria esse caso de uso sem eles (testes antigos,
+        # outros pontos de chamada)
+        self._email_service = email_service
+        self._user_lookup = user_lookup
 
     def execute(self, plantacao_id: str, timestamp: str, captura_id: str) -> Captura:
         captura = self._repository.get(plantacao_id, timestamp, captura_id)
@@ -254,7 +268,47 @@ class ClassifyCapturaUseCase:
             captura.alerta_emitido_em = agora
 
         self._repository.update(captura)
+
+        # aviso por email — SO pro upload manual (alguem especifico
+        # enviou aquela foto esperando um retorno) e SO quando da
+        # "nao_milho". O rover tambem gera nao_milho o tempo todo (mato,
+        # sombra, etc.) como parte normal da operacao — mandar email a
+        # cada uma dessas viraria spam, entao fica de fora de proposito.
+        if (
+            resultado.status_geral == "nao_milho"
+            and captura.origem == "manual"
+            and self._email_service is not None
+            and self._user_lookup is not None
+        ):
+            self._avisar_captura_invalida(captura)
+
         return captura
+
+    def _avisar_captura_invalida(self, captura: Captura) -> None:
+        try:
+            email = self._user_lookup.obter_email(captura.cliente_id)
+            if not email:
+                return
+
+            assunto = "Blick — sua captura não foi reconhecida como milho"
+            corpo = (
+                f"Olá,\n\n"
+                f"A foto que você enviou (captura {captura.captura_id}) não foi "
+                f"reconhecida como uma planta de milho válida pelo nosso modelo "
+                f"de classificação.\n\n"
+                f"Isso costuma acontecer quando a foto está com pouca luz, "
+                f"desfocada, tirada de um ângulo muito distante, ou não mostra "
+                f"a planta claramente.\n\n"
+                f"Recomendamos enviar uma nova captura, com boa iluminação e "
+                f"enquadrando bem a folha ou a planta de milho.\n\n"
+                f"— Equipe Blick"
+            )
+            self._email_service.enviar_email(email, assunto, corpo)
+        except Exception:
+            # o email e so um aviso — uma falha aqui (SES fora do ar,
+            # usuario sem email cadastrado, etc.) nunca deve derrubar a
+            # classificacao, que ja foi salva com sucesso antes disso
+            pass
 
 
 class ClassifyPendentesUseCase:

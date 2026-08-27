@@ -94,3 +94,30 @@ class IAuthService(ABC):
     @abstractmethod
     def confirmar_cadastro(self, email: str, codigo: str) -> None:
         ...
+
+
+class IEmailService(ABC):
+    """Envio de e-mail — usado hoje so pro aviso de 'foto nao e milho' no
+    upload manual, mas desenhado generico o suficiente pra outros usos
+    futuros (recuperacao de senha customizada, relatorio semanal, etc.)."""
+
+    @abstractmethod
+    def enviar_email(
+        self,
+        destinatario: str,
+        assunto: str,
+        corpo_texto: str,
+        corpo_html: str | None = None,
+    ) -> None:
+        ...
+
+
+class IUserLookupService(ABC):
+    """Busca dados de um usuario (hoje so o email) a partir do cliente_id.
+
+    Isolado do servico de autenticacao de proposito — nao mexe no fluxo
+    de login/cadastro que ja existe, so adiciona essa consulta extra."""
+
+    @abstractmethod
+    def obter_email(self, cliente_id: str) -> str | None:
+        ...

@@ -17,14 +17,22 @@ from application.use_cases import (
     SubmitCapturaUseCase,
 )
 from infrastructure.cognito_auth import CognitoAuthService
+from infrastructure.cognito_user_lookup import CognitoUserLookupService
 from infrastructure.dynamo_repository import DynamoCapturaRepository
 from infrastructure.s3_storage import S3StorageService
 from infrastructure.sagemaker_classifier import SageMakerClassificationService
+from infrastructure.ses_email_service import SESEmailService
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "blick-capturas-tcc")
 DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "blick-table")
 SAGEMAKER_ENDPOINT_NAME = os.getenv("SAGEMAKER_ENDPOINT_NAME", "blick-classificador")
+# mesmo nome de variavel que o CognitoAuthService ja usa internamente,
+# pra reaproveitar a mesma configuracao (ver task definition do ECS)
+COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "")
+# precisa de um remetente verificado no SES antes de funcionar de verdade
+# (ver instrucoes de configuracao junto com a entrega desse arquivo)
+SES_REMETENTE = os.getenv("SES_REMETENTE", "")
 
 security = HTTPBearer()
 
@@ -65,11 +73,27 @@ def get_submit_captura_simples_use_case() -> SubmitCapturaSimplesUseCase:
     )
 
 
+def get_email_service() -> SESEmailService | None:
+    if not SES_REMETENTE:
+        # sem remetente configurado, o envio de email fica desligado —
+        # nao trava nada, so essa funcionalidade especifica nao dispara
+        return None
+    return SESEmailService(remetente=SES_REMETENTE, region=AWS_REGION)
+
+
+def get_user_lookup_service() -> CognitoUserLookupService | None:
+    if not COGNITO_USER_POOL_ID:
+        return None
+    return CognitoUserLookupService(user_pool_id=COGNITO_USER_POOL_ID, region=AWS_REGION)
+
+
 def get_classify_captura_use_case() -> ClassifyCapturaUseCase:
     return ClassifyCapturaUseCase(
         repository=get_dynamo_repository(),
         storage=get_s3_storage(),
         classifier=get_classification_service(),
+        email_service=get_email_service(),
+        user_lookup=get_user_lookup_service(),
     )
 
 
