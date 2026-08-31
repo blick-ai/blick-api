@@ -25,7 +25,7 @@ class StatusEntry:
 @dataclass
 class ClassificacaoResultado:
     """Resultado devolvido pelo modelo de nuvem (via IClassificationService)."""
-    status_geral: str  # "saudavel" | "praga" | "doenca" | "nao_milho"
+    status_geral: str  # "saudavel" | "nao_saudavel" | "nao_milho"
     confianca_status_geral: float
     probabilidades: dict[str, float]
     subtipo: Optional[str] = None
@@ -155,11 +155,6 @@ class Captura:
         coord = item["coordenadas"]
         jetson = item["jetson_nano"]
 
-        # itens criados ANTES da correcao do bug de serializacao (onde
-        # plantacao_id/carrinho_id nao eram gravados como campo, so
-        # embutidos na PK/GSI1PK) nao tem esses campos diretos — extrai
-        # da propria PK/GSI1PK como fallback, pra continuar lendo
-        # capturas antigas sem precisar reprocessar nada no banco
         plantacao_id = item.get("plantacao_id") or item["PK"].removeprefix("PLANT#")
         carrinho_id = item.get("carrinho_id") or item["GSI1PK"].removeprefix("CART#")
 

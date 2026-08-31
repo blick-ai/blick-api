@@ -88,7 +88,7 @@ class BlickApiStack(Stack):
                     # serverless: so cobra pelo tempo de cada chamada, sem
                     # custo parado — ideal pro uso esporadico de teste/TCC
                     serverless_config=sagemaker.CfnEndpointConfig.ServerlessConfigProperty(
-                        max_concurrency=1,
+                        max_concurrency=5,
                         memory_size_in_mb=memoria_mb,
                     ),
                 )

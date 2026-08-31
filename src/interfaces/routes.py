@@ -154,12 +154,6 @@ def criar_captura(
     )
     result = use_case.execute(dto)
 
-    # classifica em segundo plano, sem fazer o cliente esperar — a
-    # resposta do upload volta na hora, e a classificacao acontece logo
-    # em seguida, no mesmo container, sem precisar de infraestrutura
-    # nova (sem EventBridge/Lambda/polling). Se a classificacao falhar,
-    # a captura so fica com status ERRO — o upload em si ja e garantido,
-    # nunca se perde por causa de uma falha na classificacao.
     background_tasks.add_task(
         classify_use_case.execute, result.plantacao_id, result.timestamp, result.captura_id
     )
@@ -181,9 +175,6 @@ def criar_captura_simples(
 ):
     """
     Upload manual simplificado — so a foto, sem data nem coordenadas.
-    Usado pelo botao "Carregar Captura" do dashboard. O timestamp vem do
-    EXIF da propria imagem (com fallback pra hora atual do servidor se a
-    foto nao tiver esse metadado).
     """
     dto = CapturaSimplesInputDTO(
         cliente_id=cliente_id,
@@ -211,7 +202,7 @@ def listar_capturas(
     status_geral: str | None = Query(
         default=None,
         alias="statusGeral",
-        description="Filtra por saudavel, praga, doenca ou nao_milho",
+        description="Filtra por saudavel, nao_saudavel ou nao_milho",
     ),
     origem: str | None = Query(
         default=None,
@@ -380,9 +371,7 @@ def backfill_origem(
 ):
     """
     Roda uma vez so: grava o campo "origem" explicitamente em capturas
-    antigas que nao tem esse campo (ver BackfillOrigemUseCase pro motivo
-    detalhado — sem isso, o filtro ?origem=rover nao encontra capturas
-    de antes dessa feature existir).
+    antigas que nao tem esse campo.
     """
     resultado = use_case.execute(pagina=pagina, tamanho_pagina=tamanho_pagina)
     return BackfillOrigemResponse(**resultado)
