@@ -61,10 +61,6 @@ class SubmitCapturaUseCase:
 
         self._storage.upload_image(s3_key, image_bytes)
 
-        # miniatura pequena pra listagem geral — se der erro ao gerar,
-        # simplesmente nao sobe nenhuma (thumbnail_key fica None); o
-        # detalhe/classificacao usam a imagem original de qualquer forma,
-        # entao isso nunca deve travar o upload
         thumbnail_key = None
         thumbnail_bytes = gerar_thumbnail(image_bytes)
         if thumbnail_bytes is not None:
@@ -90,16 +86,11 @@ class SubmitCapturaUseCase:
             jetson_nano=JetsonNanoInfo(
                 planta_detectada=True,
                 confianca=dto.confianca_borda if dto.confianca_borda is not None else 0.0,
-                # antes fixo em "ia-blick-v2" mesmo quando o worker de envio
-                # do Klar ja manda a versao real do modelo de borda (ver
-                # capturar_zed.py — plants_v1.tflite, nao ia-blick-v2).
-                # Agora usa o que vier do cliente, com fallback pra nao quebrar
-                # chamadas antigas que ainda nao mandam esse campo.
                 modelo_versao=dto.modelo_versao_borda or "desconhecida",
             ),
             status="PENDENTE",
             status_history=[StatusEntry(status="PENDENTE", timestamp=timestamp)],
-            origem="rover",  # explicito de proposito — nao depende do valor padrao da classe
+            origem="rover",
         )
 
         self._repository.save(captura)
@@ -116,15 +107,7 @@ class SubmitCapturaUseCase:
 class SubmitCapturaSimplesUseCase:
     """
     Upload manual simplificado — recebe SO a foto, sem data nem
-    coordenadas. O timestamp vem do EXIF da propria imagem (quando a
-    foto foi tirada de verdade); se a foto nao tiver esse metadado
-    (screenshot, imagem que passou por app que remove EXIF, etc.), usa
-    a hora atual do servidor como substituto.
-
-    Coordenadas ficam vazias de proposito — quem faz upload manual ja
-    sabe onde tirou a foto, nao faz sentido pedir isso no formulario
-    (e providenciar via Google Maps foi removido justamente por causa
-    disso).
+    coordenadas. O timestamp vem do EXIF da propria imagem.
     """
 
     def __init__(
@@ -198,10 +181,6 @@ class ClassifyCapturaUseCase:
     """
     Baixa a imagem da captura, manda pro modelo de nuvem (via
     IClassificationService) e atualiza a captura com o resultado.
-
-    Pensado pra ser chamado de forma assincrona (worker separado, nao no
-    mesmo request de SubmitCapturaUseCase) — ver conversa sobre rajada de
-    capturas quando o Klar volta a ter Wi-Fi, que motivou esse desenho.
     """
 
     def __init__(
@@ -215,10 +194,6 @@ class ClassifyCapturaUseCase:
         self._repository = repository
         self._storage = storage
         self._classifier = classifier
-        # os dois de baixo sao opcionais de proposito — se nao forem
-        # passados, o aviso por email simplesmente nao dispara, sem
-        # quebrar quem ja cria esse caso de uso sem eles (testes antigos,
-        # outros pontos de chamada)
         self._email_service = email_service
         self._user_lookup = user_lookup
 
@@ -236,14 +211,10 @@ class ClassifyCapturaUseCase:
             if possui_verde_suficiente(image_bytes):
                 resultado = self._classifier.classify(image_bytes)
             else:
-                # nao vale a pena gastar uma chamada no SageMaker numa
-                # imagem sem verde suficiente pra ter chance de ser milho
-                # (pulso bloqueando a camera, foto noturna, corredor
-                # interno...) — ja cai direto como nao_milho
                 resultado = ClassificacaoResultado(
                     status_geral="nao_milho",
                     confianca_status_geral=1.0,
-                    probabilidades={"saudavel": 0.0, "praga": 0.0, "doenca": 0.0, "nao_milho": 1.0},
+                    probabilidades={"saudavel": 0.0, "nao_saudavel": 0.0, "nao_milho": 1.0},
                     origem="filtro_enquadramento",
                 )
         except Exception as e:
@@ -255,25 +226,16 @@ class ClassifyCapturaUseCase:
 
         captura.ia_nuvem = resultado.to_dict()
         captura.status = "CLASSIFICADO"
-        # limpa erro de uma tentativa anterior mal sucedida, se houver —
-        # sem isso, reclassificar uma captura que falhou antes deixava a
-        # mensagem de erro velha "grudada" mesmo com sucesso agora
         captura.erro_detalhes = None
         captura.status_history.append(StatusEntry(status="CLASSIFICADO", timestamp=agora))
 
         # alerta so faz sentido se nao for planta saudavel nem "nao_milho"
-        # (nao_milho e ruido de captura, nao problema na lavoura)
-        if resultado.status_geral in ("praga", "doenca"):
+        if resultado.status_geral == "nao_saudavel":
             captura.alerta_emitido = True
             captura.alerta_emitido_em = agora
 
         self._repository.update(captura)
 
-        # aviso por email — SO pro upload manual (alguem especifico
-        # enviou aquela foto esperando um retorno) e SO quando da
-        # "nao_milho". O rover tambem gera nao_milho o tempo todo (mato,
-        # sombra, etc.) como parte normal da operacao — mandar email a
-        # cada uma dessas viraria spam, entao fica de fora de proposito.
         if (
             resultado.status_geral == "nao_milho"
             and captura.origem == "manual"
@@ -305,9 +267,6 @@ class ClassifyCapturaUseCase:
             )
             self._email_service.enviar_email(email, assunto, corpo)
         except Exception:
-            # o email e so um aviso — uma falha aqui (SES fora do ar,
-            # usuario sem email cadastrado, etc.) nunca deve derrubar a
-            # classificacao, que ja foi salva com sucesso antes disso
             pass
 
 
@@ -338,16 +297,7 @@ class ClassifyPendentesUseCase:
 
 class ReclassificarTodasUseCase:
     """
-    Reclassifica capturas em lote, INDEPENDENTE do status atual (inclusive
-    as ja CLASSIFICADAS antes) — usado quando uma mudanca no pipeline
-    (por exemplo, o filtro de enquadramento) precisa ser aplicada
-    retroativamente a capturas que ja tinham sido processadas.
-
-    Diferente de ClassifyPendentesUseCase (onde o conjunto "pendente"
-    encolhe sozinho a cada chamada), aqui o conjunto NAO encolhe — a
-    captura continua CLASSIFICADO depois de reclassificada. Por isso usa
-    paginacao explicita (pagina 1, 2, 3...) em vez de repetir ate total
-    zerar.
+    Reclassifica capturas em lote, INDEPENDENTE do status atual.
     """
 
     def __init__(self, repository: ICapturaRepository, classify_use_case: ClassifyCapturaUseCase):
@@ -399,16 +349,9 @@ def _resumo_de(captura: Captura, storage: IStorageService) -> CapturaResumoDTO:
     confianca_str = ia.get("confianca_status_geral")
 
     try:
-        # usa a miniatura pequena, quando existe — bem mais rapida pra
-        # carregar numa lista. Capturas antigas (de antes dessa feature)
-        # nao tem thumbnail_key, entao caem no fallback da imagem
-        # original mesmo (mais lenta, mas ainda funciona)
         chave_imagem = captura.thumbnail_key or captura.s3_key
         imagem_url = storage.generate_presigned_url(chave_imagem)
     except Exception:
-        # gerar a URL assinada e um calculo local (nao faz chamada de rede
-        # pro S3), mas se por algum motivo falhar, o resto do resumo ainda
-        # e util — nao derruba a listagem inteira por causa de uma imagem
         imagem_url = None
 
     return CapturaResumoDTO(
@@ -428,10 +371,9 @@ def _resumo_de(captura: Captura, storage: IStorageService) -> CapturaResumoDTO:
 class ListCapturasUseCase:
     """
     GET geral — lista enxuta de capturas de uma plantacao, mais recentes
-    primeiro por padrao. Suporta filtro por status_geral (saudavel/praga/
-    doenca/nao_milho), por periodo de data, e paginacao numerada (8 por
-    pagina por padrao). Pensado pra alimentar dashboard/mapa/tabela, nao
-    pra trazer o detalhe completo de cada item (isso e o GetCapturaUseCase).
+    primeiro por padrao. Suporta filtro por status_geral (saudavel/
+    nao_saudavel/nao_milho), por periodo de data, e paginacao numerada
+    (8 por pagina por padrao).
     """
 
     def __init__(self, repository: ICapturaRepository, storage: IStorageService):
@@ -470,9 +412,7 @@ class ListCapturasUseCase:
 
 
 class GetCapturaUseCase:
-    """GET especifico — detalhe completo de uma captura, incluindo URL
-    assinada da imagem (o front nao precisa de credencial AWS pra exibir
-    a foto — a URL ja vem pronta pra usar direto num <img src=...>)."""
+    """GET especifico — detalhe completo de uma captura."""
 
     def __init__(self, repository: ICapturaRepository, storage: IStorageService):
         self._repository = repository
@@ -496,8 +436,6 @@ class GetCapturaUseCase:
         try:
             imagem_url = self._storage.generate_presigned_url(captura.s3_key)
         except Exception:
-            # se a URL nao puder ser gerada por algum motivo, o resto do
-            # detalhe ainda e util — nao derruba a resposta inteira por isso
             imagem_url = None
 
         return CapturaDetalheDTO(
@@ -532,18 +470,7 @@ class GetCapturaUseCase:
 
 
 class DeletarCapturaUseCase:
-    """
-    Exclusao definitiva de uma captura — usado quando o usuario revisa o
-    detalhe e conclui que a classificacao esta errada/nao serve pra nada
-    (foto invalida, engano de captura, etc). Apaga o registro do
-    DynamoDB E a imagem do S3.
-
-    Ordem importa: apaga o banco PRIMEIRO, o S3 DEPOIS. Se a exclusao do
-    S3 falhar por algum motivo, o pior cenario e uma imagem orfa sobrando
-    no bucket (inofensivo, limpavel depois) — nunca um registro no banco
-    apontando pra uma imagem que nao existe mais (isso sim quebraria a
-    classificacao depois, com erro NoSuchKey).
-    """
+    """Exclusao definitiva de uma captura — apaga DynamoDB E S3."""
 
     def __init__(self, repository: ICapturaRepository, storage: IStorageService):
         self._repository = repository
@@ -559,28 +486,13 @@ class DeletarCapturaUseCase:
         try:
             self._storage.delete_image(captura.s3_key)
         except Exception:
-            # o registro ja foi removido do banco (o que importa pra
-            # listagem/classificacao) — uma falha aqui so deixa uma
-            # imagem orfa no S3, nao vale reverter nem falhar a
-            # exclusao inteira por causa disso
             pass
 
         return True
 
 
 class GerarThumbnailsUseCase:
-    """
-    Backfill: gera a miniatura pequena (ver preprocessamento_imagem.
-    gerar_thumbnail) pras capturas ANTIGAS que nao tem thumbnail_key —
-    ou seja, tudo que foi enviado antes dessa feature existir. Sem isso,
-    essas capturas continuam usando a imagem original (varios MB) na
-    listagem geral pra sempre, mesmo com a otimizacao ja no ar.
-
-    Mesma logica de paginacao explicita do ReclassificarTodasUseCase —
-    o conjunto "sem thumbnail" encolhe conforme processa, mas ainda assim
-    usa paginas numeradas por simplicidade e consistencia com o resto da
-    API.
-    """
+    """Backfill: gera miniatura pra capturas ANTIGAS que nao tem thumbnail_key."""
 
     def __init__(self, repository: ICapturaRepository, storage: IStorageService):
         self._repository = repository
@@ -631,22 +543,7 @@ class GerarThumbnailsUseCase:
 
 
 class BackfillOrigemUseCase:
-    """
-    Backfill: escreve o campo "origem" explicitamente em capturas
-    ANTIGAS, de antes desse campo existir.
-
-    Sem isso, o campo so e "assumido" como rover na LEITURA em Python
-    (Captura.from_dynamo_item cai em origem="rover" quando o atributo
-    nao existe no item bruto) — mas esse fallback nao vale pro FILTRO
-    que o proprio DynamoDB faz (FilterExpression roda nos dados brutos,
-    antes do Python ver o item). Isso fazia "origem=rover" na listagem
-    NAO encontrar essas capturas antigas, mesmo sendo rover de verdade.
-
-    E seguro rodar em qualquer captura, inclusive repetidamente: so
-    reler e regravar cada item ja materializa o valor certo (manual
-    continua manual, rover — explicito ou assumido — vira rover
-    gravado de verdade).
-    """
+    """Backfill: escreve o campo "origem" explicitamente em capturas ANTIGAS."""
 
     def __init__(self, repository: ICapturaRepository):
         self._repository = repository
