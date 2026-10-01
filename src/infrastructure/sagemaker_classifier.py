@@ -8,10 +8,11 @@ from domain.ports import IClassificationService
 
 class SageMakerClassificationService(IClassificationService):
     """
-    Adaptador que chama o endpoint do SageMaker hospedando o modelo
+    Adaptador que chama o endpoint do SageMaker hospedando o pipeline
     treinado no repositorio blick-model (ver sagemaker/inference.py la —
     o formato de resposta abaixo espelha exatamente o que aquele
-    predict_fn devolve).
+    predict_fn devolve: segmentacao milho/nao-milho -> isolamento por
+    planta -> classificacao saudavel/nao_saudavel por planta).
     """
 
     def __init__(self, endpoint_name: str, region: str):
@@ -30,7 +31,11 @@ class SageMakerClassificationService(IClassificationService):
         return ClassificacaoResultado(
             status_geral=corpo["status_geral"],
             confianca_status_geral=corpo["confianca_status_geral"],
-            probabilidades=corpo.get("probabilidades_status_geral", {}),
+            # chave corrigida: o inference.py devolve "probabilidades"
+            # (nao "probabilidades_status_geral" — essa leitura estava
+            # errada e sempre caia no fallback {} antes dessa correcao)
+            probabilidades=corpo.get("probabilidades", {}),
             subtipo=corpo.get("subtipo"),
             confianca_subtipo=corpo.get("confianca_subtipo"),
+            analise_por_planta=corpo.get("analise_por_planta", []),
         )

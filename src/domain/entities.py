@@ -35,6 +35,14 @@ class ClassificacaoResultado:
     # suficiente na imagem). Existe pra dar rastreabilidade/auditoria de
     # quantas capturas estao caindo em cada motivo.
     origem: str = "modelo"
+    # detalhe por planta de milho encontrada na foto (pipeline novo de 3
+    # estagios: segmentacao -> isolamento -> classificacao). Cada item e
+    # {"classe": "saudavel"|"nao_saudavel", "confianca": float}. So existe
+    # quando o SageMaker achou pelo menos 1 planta; fica vazio em
+    # "nao_milho" ou pra resultados antigos (de antes desse campo
+    # existir). NAO e usado pelo front hoje (a captura e exibida inteira,
+    # sem recorte/demarcacao) — existe pra auditoria/debug e pro TCC.
+    analise_por_planta: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -49,6 +57,13 @@ class ClassificacaoResultado:
                 if self.confianca_subtipo is not None else None
             ),
             "origem": self.origem,
+            "analise_por_planta": [
+                {
+                    "classe": item.get("classe"),
+                    "confianca": Decimal(str(round(float(item["confianca"]), 4))),
+                }
+                for item in self.analise_por_planta
+            ],
         }
 
 
