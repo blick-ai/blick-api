@@ -62,7 +62,10 @@ class BlickApiStack(Stack):
         model_data_url: str,
         sagemaker_role_arn: str,
         endpoint_name: str = "blick-classificador",
-        memoria_mb: int = 3072,
+        # 3072MB era suficiente pro modelo unico de deteccao direta; o
+        # pipeline novo carrega 2 modelos YOLO ao mesmo tempo (segmentacao
+        # + classificacao), por isso o padrao subiu pra 4096MB
+        memoria_mb: int = 4096,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
