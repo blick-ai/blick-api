@@ -2,7 +2,6 @@ import base64
 import uuid
 from datetime import datetime
 
-from application.filtro_enquadramento import possui_verde_suficiente
 from application.preprocessamento_imagem import (
     extrair_timestamp_exif,
     gerar_thumbnail,
@@ -19,7 +18,6 @@ from application.dtos import (
 )
 from domain.entities import (
     Captura,
-    ClassificacaoResultado,
     Coordenadas,
     JetsonNanoInfo,
     StatusEntry,
@@ -208,15 +206,13 @@ class ClassifyCapturaUseCase:
             image_bytes = self._storage.download_image(captura.s3_key)
             image_bytes = redimensionar_para_classificacao(image_bytes)
 
-            if possui_verde_suficiente(image_bytes):
-                resultado = self._classifier.classify(image_bytes)
-            else:
-                resultado = ClassificacaoResultado(
-                    status_geral="nao_milho",
-                    confianca_status_geral=1.0,
-                    probabilidades={"saudavel": 0.0, "nao_saudavel": 0.0, "nao_milho": 1.0},
-                    origem="filtro_enquadramento",
-                )
+            # o filtro heuristico de "verde suficiente" foi removido daqui —
+            # quem decide "isso e milho?" agora e o estagio 1 do pipeline no
+            # SageMaker (modelo de segmentacao dedicado, pesos_Yolo26.pt),
+            # que e exatamente a correcao definitiva que esse filtro citava
+            # como pendente. Se o estagio 1 nao achar nenhuma planta, o
+            # proprio classify() ja devolve status_geral="nao_milho".
+            resultado = self._classifier.classify(image_bytes)
         except Exception as e:
             captura.status = "ERRO"
             captura.erro_detalhes = str(e)
