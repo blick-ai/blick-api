@@ -278,6 +278,7 @@ def obter_captura(
         subtipo=detalhe.subtipo,
         confianca_subtipo=detalhe.confianca_subtipo,
         probabilidades=detalhe.probabilidades,
+        analise_por_planta=detalhe.analise_por_planta,
         modelo_versao_borda=detalhe.modelo_versao_borda,
         confianca_borda=detalhe.confianca_borda,
         imagem_url=detalhe.imagem_url,
@@ -327,6 +328,7 @@ def classificar_captura(
         status_geral=ia.get("status_geral"),
         confianca_status_geral=float(confianca_str) if confianca_str is not None else None,
         subtipo=ia.get("subtipo"),
+        analise_por_planta=ia.get("analise_por_planta"),
     )
 
 
