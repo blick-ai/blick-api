@@ -12,6 +12,7 @@ from application.use_cases import (
     GetCapturaUseCase,
     ListCapturasUseCase,
     ListClientesUseCase,
+    ListMapaCapturasUseCase,
     ReclassificarTodasUseCase,
     SubmitCapturaSimplesUseCase,
     SubmitCapturaUseCase,
@@ -124,6 +125,10 @@ def get_backfill_origem_use_case() -> BackfillOrigemUseCase:
 
 def get_list_capturas_use_case() -> ListCapturasUseCase:
     return ListCapturasUseCase(repository=get_dynamo_repository(), storage=get_s3_storage())
+
+
+def get_list_mapa_capturas_use_case() -> ListMapaCapturasUseCase:
+    return ListMapaCapturasUseCase(repository=get_dynamo_repository())
 
 
 def get_captura_use_case() -> GetCapturaUseCase:
