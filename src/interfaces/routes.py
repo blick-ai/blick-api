@@ -255,13 +255,18 @@ def listar_capturas(
         total_paginas=resultado.total_paginas,
     )
 
+
+# IMPORTANTE: declarar ANTES de /capturas/{captura_id}, senao "mapa" vira captura_id.
 @router.get("/capturas/mapa", response_model=MapaResponse)
 def mapa_capturas(
     plantacao_id: str = Query(default="plantacao-mock-001", alias="plantacaoId"),
     status_geral: str | None = Query(
         default=None,
         alias="statusGeral",
-        description="Filtra por saudavel, nao_saudavel ou nao_milho. Sem filtro, devolve todos com coordenada.",
+        description=(
+            "Filtra por saudavel, nao_saudavel ou nao_milho. "
+            "Sem filtro, devolve todos com coordenada."
+        ),
     ),
     cliente_id: str = Depends(get_current_cliente_id),
     use_case: ListMapaCapturasUseCase = Depends(get_list_mapa_capturas_use_case),
