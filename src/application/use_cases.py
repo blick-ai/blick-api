@@ -205,13 +205,6 @@ class ClassifyCapturaUseCase:
         try:
             image_bytes = self._storage.download_image(captura.s3_key)
             image_bytes = redimensionar_para_classificacao(image_bytes)
-
-            # o filtro heuristico de "verde suficiente" foi removido daqui —
-            # quem decide "isso e milho?" agora e o estagio 1 do pipeline no
-            # SageMaker (modelo de segmentacao dedicado, pesos_Yolo26.pt),
-            # que e exatamente a correcao definitiva que esse filtro citava
-            # como pendente. Se o estagio 1 nao achar nenhuma planta, o
-            # proprio classify() ja devolve status_geral="nao_milho".
             resultado = self._classifier.classify(image_bytes)
         except Exception as e:
             captura.status = "ERRO"
@@ -225,7 +218,6 @@ class ClassifyCapturaUseCase:
         captura.erro_detalhes = None
         captura.status_history.append(StatusEntry(status="CLASSIFICADO", timestamp=agora))
 
-        # alerta so faz sentido se nao for planta saudavel nem "nao_milho"
         if resultado.status_geral == "nao_saudavel":
             captura.alerta_emitido = True
             captura.alerta_emitido_em = agora
@@ -405,6 +397,63 @@ class ListCapturasUseCase:
             total=total,
             total_paginas=total_paginas,
         )
+
+
+LIMITE_PONTOS_MAPA = 20_000
+
+
+class MapaLimiteExcedidoError(Exception):
+    """Mais pontos do que a resposta do mapa suporta com seguranca."""
+
+
+class ListMapaCapturasUseCase:
+    """
+    GET /capturas/mapa — pontos enxutos pra desenhar o mapa. Entrega so o
+    que o mapa precisa: captura_id, timestamp (o detalhe exige ele na URL),
+    latitude, longitude e status_geral. Nao gera imagem_url (cada URL
+    assinada pesa ~2 KB e ninguem abre 3 mil fotos) — a foto vem do
+    endpoint de detalhe quando o usuario seleciona o pin.
+    """
+
+    def __init__(self, repository: ICapturaRepository):
+        self._repository = repository
+
+    def execute(
+        self,
+        plantacao_id: str = MOCK_PLANTACAO_ID,
+        status_geral: str | None = None,
+        limite: int = LIMITE_PONTOS_MAPA,
+    ) -> dict:
+        capturas, _ = self._repository.list_by_plantacao(
+            plantacao_id=plantacao_id,
+            status_geral=status_geral,
+            pagina=1,
+            tamanho_pagina=limite + 1,
+        )
+
+        if len(capturas) > limite:
+            raise MapaLimiteExcedidoError(
+                f"Mais de {limite} pontos para o mapa. Use o filtro statusGeral."
+            )
+
+        pontos = []
+        for c in capturas:
+            lat, lon = c.coordenadas.latitude, c.coordenadas.longitude
+            if lat is None or lon is None:
+                continue
+
+            ia = c.ia_nuvem or {}
+            pontos.append(
+                {
+                    "captura_id": c.captura_id,
+                    "timestamp": c.timestamp,
+                    "latitude": round(float(lat), 6),
+                    "longitude": round(float(lon), 6),
+                    "status_geral": ia.get("status_geral"),
+                }
+            )
+
+        return {"total": len(pontos), "pontos": pontos}
 
 
 class GetCapturaUseCase:

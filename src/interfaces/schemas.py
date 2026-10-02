@@ -112,6 +112,23 @@ class ListCapturasResponse(BaseModel):
     total_paginas: int = Field(alias="totalPaginas")
 
 
+class PontoMapaResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    captura_id: str = Field(alias="capturaId")
+    timestamp: str
+    latitude: float
+    longitude: float
+    status_geral: Optional[str] = Field(default=None, alias="statusGeral")
+
+
+class MapaResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    total: int
+    pontos: list[PontoMapaResponse]
+
+
 class CapturaDetalheResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
