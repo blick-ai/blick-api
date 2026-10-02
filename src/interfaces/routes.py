@@ -11,6 +11,8 @@ from application.use_cases import (
     GetCapturaUseCase,
     ListCapturasUseCase,
     ListClientesUseCase,
+    ListMapaCapturasUseCase,
+    MapaLimiteExcedidoError,
     ReclassificarTodasUseCase,
     SubmitCapturaSimplesUseCase,
     SubmitCapturaUseCase,
@@ -32,6 +34,7 @@ from interfaces.dependencies import (
     get_gerar_thumbnails_use_case,
     get_list_capturas_use_case,
     get_list_clientes_use_case,
+    get_list_mapa_capturas_use_case,
     get_reclassificar_todas_use_case,
     get_submit_captura_simples_use_case,
     get_submit_captura_use_case,
@@ -49,6 +52,7 @@ from interfaces.schemas import (
     DeletarCapturaResponse,
     ListCapturasResponse,
     ListClientesResponse,
+    MapaResponse,
     LoginRequest,
     LoginResponse,
     MessageResponse,
@@ -250,6 +254,22 @@ def listar_capturas(
         total=resultado.total,
         total_paginas=resultado.total_paginas,
     )
+
+@router.get("/capturas/mapa", response_model=MapaResponse)
+def mapa_capturas(
+    plantacao_id: str = Query(default="plantacao-mock-001", alias="plantacaoId"),
+    status_geral: str | None = Query(
+        default=None,
+        alias="statusGeral",
+        description="Filtra por saudavel, nao_saudavel ou nao_milho. Sem filtro, devolve todos com coordenada.",
+    ),
+    cliente_id: str = Depends(get_current_cliente_id),
+    use_case: ListMapaCapturasUseCase = Depends(get_list_mapa_capturas_use_case),
+):
+    try:
+        return use_case.execute(plantacao_id=plantacao_id, status_geral=status_geral)
+    except MapaLimiteExcedidoError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.get("/capturas/{captura_id}", response_model=CapturaDetalheResponse)
