@@ -24,12 +24,20 @@ class CapturaResponse(BaseModel):
     s3_key: str
 
 
+class AnalisePorPlantaItem(BaseModel):
+    classe: str
+    confianca: float
+
+
 class ClassificacaoResponse(BaseModel):
     captura_id: str
     status: str
     status_geral: Optional[str] = None
     confianca_status_geral: Optional[float] = None
     subtipo: Optional[str] = None
+    analise_por_planta: Optional[list[AnalisePorPlantaItem]] = Field(
+        default=None, alias="analisePorPlanta"
+    )
 
 
 class PendentesResponse(BaseModel):
@@ -120,6 +128,9 @@ class CapturaDetalheResponse(BaseModel):
     subtipo: Optional[str] = None
     confianca_subtipo: Optional[float] = Field(default=None, alias="confiancaSubtipo")
     probabilidades: Optional[dict] = None
+    analise_por_planta: Optional[list[AnalisePorPlantaItem]] = Field(
+        default=None, alias="analisePorPlanta"
+    )
     modelo_versao_borda: str = Field(alias="modeloVersaoBorda")
     confianca_borda: float = Field(alias="confiancaBorda")
     imagem_url: Optional[str] = Field(default=None, alias="imagemUrl")
