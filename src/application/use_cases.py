@@ -426,8 +426,6 @@ class GetCapturaUseCase:
         if probabilidades is not None:
             probabilidades = {k: float(v) for k, v in probabilidades.items()}
 
-        analise_por_planta = ia.get("analise_por_planta")
-
         confianca_status_str = ia.get("confianca_status_geral")
         confianca_subtipo_str = ia.get("confianca_subtipo")
 
@@ -454,7 +452,6 @@ class GetCapturaUseCase:
                 float(confianca_subtipo_str) if confianca_subtipo_str is not None else None
             ),
             probabilidades=probabilidades,
-            analise_por_planta=analise_por_planta,
             modelo_versao_borda=captura.jetson_nano.modelo_versao,
             confianca_borda=captura.jetson_nano.confianca,
             imagem_url=imagem_url,
@@ -465,6 +462,7 @@ class GetCapturaUseCase:
             alerta_emitido=captura.alerta_emitido,
             origem=captura.origem,
             alerta_emitido_em=captura.alerta_emitido_em,
+            analise_por_planta=ia.get("analise_por_planta"),
         )
 
 

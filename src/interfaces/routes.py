@@ -38,6 +38,7 @@ from interfaces.dependencies import (
     security,
 )
 from interfaces.schemas import (
+    AlertaResponse,
     CadastroRequest,
     CapturaDetalheResponse,
     CapturaRequest,
@@ -47,12 +48,15 @@ from interfaces.schemas import (
     ClassificacaoResponse,
     ConfirmarCadastroRequest,
     DeletarCapturaResponse,
+    DiagnosticoResponse,
     ListCapturasResponse,
     ListClientesResponse,
+    LocalizacaoResponse,
     LoginRequest,
     LoginResponse,
     MessageResponse,
     PendentesResponse,
+    PlantaResponse,
     ReclassificarResponse,
     RecuperarSenhaRequest,
     BackfillOrigemResponse,
@@ -197,7 +201,12 @@ def criar_captura_simples(
 def listar_capturas(
     plantacao_id: str = Query(default="plantacao-mock-001", alias="plantacaoId"),
     status: str | None = Query(
-        default=None, description="Filtra por PENDENTE, CLASSIFICADO ou ERRO"
+        default="CLASSIFICADO",
+        description=(
+            "Filtra por PENDENTE, CLASSIFICADO ou ERRO. Por padrao so retorna "
+            "CLASSIFICADO (o front nao deve receber captura ainda em processamento) "
+            "— pra ver as outras, passe o status explicitamente."
+        ),
     ),
     status_geral: str | None = Query(
         default=None,
@@ -264,29 +273,44 @@ def obter_captura(
     if detalhe is None:
         raise HTTPException(status_code=404, detail="Captura não encontrada")
 
+    analise = detalhe.analise_por_planta or []
+    n_doentes = sum(1 for p in analise if p.get("classe") == "nao_saudavel")
+
+    diagnostico = None
+    if detalhe.status_geral is not None:
+        diagnostico = DiagnosticoResponse(
+            status=detalhe.status_geral,
+            confianca=detalhe.confianca_status_geral,
+            total_plantas=len(analise),
+            plantas_nao_saudaveis=n_doentes,
+        )
+
     return CapturaDetalheResponse(
         captura_id=detalhe.captura_id,
-        plantacao_id=detalhe.plantacao_id,
+        capturado_em=detalhe.timestamp,
+        origem=detalhe.origem,
         carrinho_id=detalhe.carrinho_id,
+        plantacao_id=detalhe.plantacao_id,
         cliente_id=detalhe.cliente_id,
-        timestamp=detalhe.timestamp,
-        status=detalhe.status,
-        latitude=detalhe.latitude,
-        longitude=detalhe.longitude,
-        status_geral=detalhe.status_geral,
-        confianca_status_geral=detalhe.confianca_status_geral,
-        subtipo=detalhe.subtipo,
-        confianca_subtipo=detalhe.confianca_subtipo,
-        probabilidades=detalhe.probabilidades,
-        analise_por_planta=detalhe.analise_por_planta,
-        modelo_versao_borda=detalhe.modelo_versao_borda,
-        confianca_borda=detalhe.confianca_borda,
+        localizacao=LocalizacaoResponse(
+            latitude=detalhe.latitude,
+            longitude=detalhe.longitude,
+        ),
+        status_processamento=detalhe.status,
+        diagnostico=diagnostico,
+        plantas=[
+            PlantaResponse(classe=p.get("classe"), confianca=p.get("confianca"))
+            for p in analise
+        ],
+        alerta=AlertaResponse(
+            emitido=detalhe.alerta_emitido,
+            ultima_emissao=detalhe.alerta_emitido_em,
+        ),
         imagem_url=detalhe.imagem_url,
         status_history=detalhe.status_history,
         erro_detalhes=detalhe.erro_detalhes,
-        alerta_emitido=detalhe.alerta_emitido,
-        origem=detalhe.origem,
-        alerta_emitido_em=detalhe.alerta_emitido_em,
+        modelo_versao_borda=detalhe.modelo_versao_borda,
+        confianca_borda=detalhe.confianca_borda,
     )
 
 
@@ -328,7 +352,6 @@ def classificar_captura(
         status_geral=ia.get("status_geral"),
         confianca_status_geral=float(confianca_str) if confianca_str is not None else None,
         subtipo=ia.get("subtipo"),
-        analise_por_planta=ia.get("analise_por_planta"),
     )
 
 
