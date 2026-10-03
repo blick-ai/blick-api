@@ -24,20 +24,12 @@ class CapturaResponse(BaseModel):
     s3_key: str
 
 
-class AnalisePorPlantaItem(BaseModel):
-    classe: str
-    confianca: float
-
-
 class ClassificacaoResponse(BaseModel):
     captura_id: str
     status: str
     status_geral: Optional[str] = None
     confianca_status_geral: Optional[float] = None
     subtipo: Optional[str] = None
-    analise_por_planta: Optional[list[AnalisePorPlantaItem]] = Field(
-        default=None, alias="analisePorPlanta"
-    )
 
 
 class PendentesResponse(BaseModel):
@@ -129,33 +121,56 @@ class MapaResponse(BaseModel):
     pontos: list[PontoMapaResponse]
 
 
+class LocalizacaoResponse(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class PlantaResponse(BaseModel):
+    classe: Optional[str] = None
+    confianca: Optional[float] = None
+
+
+class DiagnosticoResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    status: Optional[str] = None
+    confianca: Optional[float] = None
+    total_plantas: int = Field(default=0, alias="totalPlantas")
+    plantas_nao_saudaveis: int = Field(default=0, alias="plantasNaoSaudaveis")
+
+
+class AlertaResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    emitido: bool
+    ultima_emissao: Optional[str] = Field(default=None, alias="ultimaEmissao")
+
+
 class CapturaDetalheResponse(BaseModel):
+    """
+    Resposta aninhada do detalhe de uma captura. Troca a forma antiga
+    (flat) por essa estrutura, pedida pelo front pra organizar melhor o
+    consumo dos dados.
+    """
     model_config = {"populate_by_name": True}
 
     captura_id: str = Field(alias="capturaId")
-    plantacao_id: str = Field(alias="plantacaoId")
+    capturado_em: str = Field(alias="capturadoEm")
+    origem: str = "rover"
     carrinho_id: str = Field(alias="carrinhoId")
+    plantacao_id: str = Field(alias="plantacaoId")
     cliente_id: str = Field(alias="clienteId")
-    timestamp: str
-    status: str
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    status_geral: Optional[str] = Field(default=None, alias="statusGeral")
-    confianca_status_geral: Optional[float] = Field(default=None, alias="confiancaStatusGeral")
-    subtipo: Optional[str] = None
-    confianca_subtipo: Optional[float] = Field(default=None, alias="confiancaSubtipo")
-    probabilidades: Optional[dict] = None
-    analise_por_planta: Optional[list[AnalisePorPlantaItem]] = Field(
-        default=None, alias="analisePorPlanta"
-    )
-    modelo_versao_borda: str = Field(alias="modeloVersaoBorda")
-    confianca_borda: float = Field(alias="confiancaBorda")
+    localizacao: LocalizacaoResponse
+    status_processamento: str = Field(alias="statusProcessamento")
+    diagnostico: Optional[DiagnosticoResponse] = None
+    plantas: list[PlantaResponse] = Field(default_factory=list)
+    alerta: AlertaResponse
     imagem_url: Optional[str] = Field(default=None, alias="imagemUrl")
     status_history: list[dict] = Field(alias="statusHistory")
     erro_detalhes: Optional[str] = Field(default=None, alias="erroDetalhes")
-    alerta_emitido: bool = Field(alias="alertaEmitido")
-    origem: str = "rover"
-    alerta_emitido_em: Optional[str] = Field(default=None, alias="alertaEmitidoEm")
+    modelo_versao_borda: str = Field(alias="modeloVersaoBorda")
+    confianca_borda: float = Field(alias="confiancaBorda")
 
 
 class ListClientesResponse(BaseModel):

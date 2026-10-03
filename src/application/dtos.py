@@ -82,7 +82,6 @@ class CapturaDetalheDTO:
     subtipo: Optional[str]
     confianca_subtipo: Optional[float]
     probabilidades: Optional[dict]
-    analise_por_planta: Optional[list[dict]]
     modelo_versao_borda: str
     confianca_borda: float
     imagem_url: Optional[str]
@@ -91,6 +90,7 @@ class CapturaDetalheDTO:
     alerta_emitido: bool
     origem: str
     alerta_emitido_em: Optional[str]
+    analise_por_planta: Optional[list[dict]] = None
 
 
 @dataclass
