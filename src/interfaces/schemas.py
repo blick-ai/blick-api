@@ -104,30 +104,21 @@ class ListCapturasResponse(BaseModel):
     total_paginas: int = Field(alias="totalPaginas")
 
 
-class LocalizacaoResponse(BaseModel):
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-
-
-class PlantaResponse(BaseModel):
-    classe: Optional[str] = None
-    confianca: Optional[float] = None
-
-
-class DiagnosticoResponse(BaseModel):
+class PontoMapaResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
-    status: Optional[str] = None
-    confianca: Optional[float] = None
-    total_plantas: int = Field(default=0, alias="totalPlantas")
-    plantas_nao_saudaveis: int = Field(default=0, alias="plantasNaoSaudaveis")
+    captura_id: str = Field(alias="capturaId")
+    timestamp: str
+    latitude: float
+    longitude: float
+    status_geral: Optional[str] = Field(default=None, alias="statusGeral")
 
 
-class AlertaResponse(BaseModel):
+class MapaResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
-    emitido: bool
-    ultima_emissao: Optional[str] = Field(default=None, alias="ultimaEmissao")
+    total: int
+    pontos: list[PontoMapaResponse]
 
 
 class CapturaDetalheResponse(BaseModel):
