@@ -121,6 +121,32 @@ class MapaResponse(BaseModel):
     pontos: list[PontoMapaResponse]
 
 
+class LocalizacaoResponse(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class PlantaResponse(BaseModel):
+    classe: Optional[str] = None
+    confianca: Optional[float] = None
+
+
+class DiagnosticoResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    status: Optional[str] = None
+    confianca: Optional[float] = None
+    total_plantas: int = Field(default=0, alias="totalPlantas")
+    plantas_nao_saudaveis: int = Field(default=0, alias="plantasNaoSaudaveis")
+
+
+class AlertaResponse(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    emitido: bool
+    ultima_emissao: Optional[str] = Field(default=None, alias="ultimaEmissao")
+
+
 class CapturaDetalheResponse(BaseModel):
     """
     Resposta aninhada do detalhe de uma captura. Troca a forma antiga
