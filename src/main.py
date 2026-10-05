@@ -32,3 +32,10 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(router)
+
+
+# Health check do Load Balancer — sem autenticacao de proposito, e' o
+# ALB (nao um cliente de fora) que bate aqui pra saber se a task ta viva.
+@app.get("/health")
+def health():
+    return {"status": "ok"}
