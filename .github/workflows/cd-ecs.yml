@@ -55,26 +55,8 @@ jobs:
             --services $ECS_SERVICE \
             --region $AWS_REGION
 
-      - name: Descobrir o IP publico da task nova
-        id: novo-ip
-        run: |
-          TASK_ARN=$(aws ecs list-tasks --cluster $ECS_CLUSTER --service-name $ECS_SERVICE --region $AWS_REGION --query "taskArns[0]" --output text)
-          ENI_ID=$(aws ecs describe-tasks --cluster $ECS_CLUSTER --tasks "$TASK_ARN" --region $AWS_REGION --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text)
-          IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI_ID" --region $AWS_REGION --query "NetworkInterfaces[0].Association.PublicIp" --output text)
-          echo "ip=$IP" >> "$GITHUB_OUTPUT"
-          echo "Task nova no IP: $IP"
-
-      - name: Atualizar integracao do API Gateway
-        run: |
-          INTEGRATION_ID=$(aws apigatewayv2 get-integrations --api-id $API_GATEWAY_ID --region $AWS_REGION --query "Items[0].IntegrationId" --output text)
-          aws apigatewayv2 update-integration \
-            --api-id $API_GATEWAY_ID \
-            --integration-id "$INTEGRATION_ID" \
-            --integration-uri "http://${{ steps.novo-ip.outputs.ip }}:8000/{proxy}" \
-            --region $AWS_REGION
-
       - name: Resumo do deploy
         run: |
           echo "### Deploy concluido :rocket:" >> $GITHUB_STEP_SUMMARY
-          echo "- Novo IP da task: ${{ steps.novo-ip.outputs.ip }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Trafico agora passa pelo ALB (DNS fixo) - nao precisa mais achar IP nem atualizar o API Gateway a cada deploy" >> $GITHUB_STEP_SUMMARY
           echo "- Endpoint (sem mudanca): https://$API_GATEWAY_ID.execute-api.$AWS_REGION.amazonaws.com" >> $GITHUB_STEP_SUMMARY
