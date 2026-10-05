@@ -15,7 +15,8 @@ __init__) e o CloudFormation propaga automaticamente pra todo recurso
 dentro dele.
 """
 
-from aws_cdk import Stack, Tags
+from aws_cdk import CfnOutput, Stack, Tags
+from aws_cdk import aws_elasticloadbalancingv2 as elbv2
 from aws_cdk import aws_sagemaker as sagemaker
 from constructs import Construct
 
@@ -33,14 +34,20 @@ TAGS = {
     "owner": "BOSSINI",
 }
 
+# rede onde o ECS roda (criada manualmente, so referenciada aqui)
+VPC_ID = "vpc-00b4be71b7c3587ac"
+SUBNETS_ALB = [
+    "subnet-057e01dfe46017a5e",  # us-east-1c
+    "subnet-0d19adee94a060eea",  # us-east-1b
+]
+SG_ALB = "sg-0c5dafd2c21aa5664"
+PORTA_API = 8000
+
 # conta oficial da AWS que hospeda os containers gerenciados de Deep
 # Learning Containers — estavel ha anos, mesma pra maioria das regioes
 # comerciais dos EUA (ver tabela oficial se um dia mudarem de regiao)
 CONTA_DLC_POR_REGIAO = {
     "us-east-1": "763104351884",
-    "us-east-2": "763104351884",
-    "us-west-1": "763104351884",
-    "us-west-2": "763104351884",
 }
 
 
@@ -105,6 +112,55 @@ class BlickApiStack(Stack):
             endpoint_name=endpoint_name,
         )
         endpoint.add_resource_dependency(endpoint_config)
+
+        # ---- Application Load Balancer na frente do ECS ----
+        # HTTP:80 so; o HTTPS e terminado no API Gateway. Target type "ip"
+        # porque a task Fargate usa awsvpc. O ECS service e anexado ao
+        # target group depois, via `aws ecs update-service`.
+        alb = elbv2.CfnLoadBalancer(
+            self, "BlickAlb",
+            name="blick-alb",
+            type="application",
+            scheme="internet-facing",
+            subnets=SUBNETS_ALB,
+            security_groups=[SG_ALB],
+        )
+
+        target_group = elbv2.CfnTargetGroup(
+            self, "BlickTargetGroup",
+            name="blick-api-tg",
+            vpc_id=VPC_ID,
+            target_type="ip",
+            protocol="HTTP",
+            port=PORTA_API,
+            health_check_path="/health",
+            health_check_protocol="HTTP",
+            health_check_interval_seconds=30,
+            health_check_timeout_seconds=5,
+            healthy_threshold_count=2,
+            unhealthy_threshold_count=3,
+            matcher=elbv2.CfnTargetGroup.MatcherProperty(http_code="200"),
+            target_group_attributes=[
+                elbv2.CfnTargetGroup.TargetGroupAttributeProperty(
+                    key="deregistration_delay.timeout_seconds", value="30"
+                )
+            ],
+        )
+
+        elbv2.CfnListener(
+            self, "BlickListener",
+            load_balancer_arn=alb.ref,
+            port=80,
+            protocol="HTTP",
+            default_actions=[
+                elbv2.CfnListener.ActionProperty(
+                    type="forward", target_group_arn=target_group.ref
+                )
+            ],
+        )
+
+        CfnOutput(self, "AlbDnsName", value=alb.attr_dns_name)
+        CfnOutput(self, "TargetGroupArn", value=target_group.ref)
 
         for chave, valor in TAGS.items():
             Tags.of(self).add(chave, valor)
