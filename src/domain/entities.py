@@ -58,13 +58,23 @@ class ClassificacaoResultado:
             ),
             "origem": self.origem,
             "analise_por_planta": [
-                {
-                    "classe": item.get("classe"),
-                    "confianca": Decimal(str(round(float(item["confianca"]), 4))),
-                }
-                for item in self.analise_por_planta
+                self._planta_para_dynamo(item) for item in self.analise_por_planta
             ],
         }
+
+    @staticmethod
+    def _planta_para_dynamo(item: dict) -> dict:
+        planta = {
+            "classe": item.get("classe"),
+            "confianca": Decimal(str(round(float(item["confianca"]), 4))),
+        }
+        # campos novos devolvidos pelo endpoint (opcionais: capturas antigas
+        # e endpoints sem esses campos continuam funcionando)
+        if item.get("area_pct") is not None:
+            planta["area_pct"] = Decimal(str(round(float(item["area_pct"]), 3)))
+        if item.get("aninhada") is not None:
+            planta["aninhada"] = bool(item["aninhada"])
+        return planta
 
 
 @dataclass
