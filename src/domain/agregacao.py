@@ -20,6 +20,11 @@ Regra por AREA (usada quando o endpoint devolve area_pct por planta):
   contam; adesivo vira uma doente grande. Sem area_pct, vale a regra acima.
   AGREGACAO_AREA_MIN_PCT   (padrao 0.8)
   AGREGACAO_AREA_CONF_MIN  (padrao 0.75)
+  Planta doente ANINHADA (folha dentro de uma planta maior que o modelo chamou
+  de saudavel) normalmente e ruido, mas uma folha com adesivo costuma aparecer
+  assim: ela conta se for grande e muito confiante:
+  AGREGACAO_ANINHADA_AREA_MIN_PCT   (padrao 1.5)
+  AGREGACAO_ANINHADA_CONF_MIN       (padrao 0.90)
 
 Os valores vem de variaveis de ambiente (padrao = confianca minima 0.90 e 2 ou
 mais plantas doentes; antes era qualquer confianca):
@@ -87,9 +92,19 @@ def agregar_por_planta(
     return "saudavel", sum(saudaveis) / len(saudaveis)
 
 
+def _doente_conta(p, area_min, conf_min, area_aninhada, conf_aninhada) -> bool:
+    confianca = float(p.get("confianca", 0))
+    area = float(p.get("area_pct") or 0)
+    if p.get("aninhada"):
+        return confianca >= conf_aninhada and area >= area_aninhada
+    return confianca >= conf_min and area >= area_min
+
+
 def _agregar_por_area(plantas: list[dict]) -> Optional[tuple[str, float]]:
     area_min = _env_float("AGREGACAO_AREA_MIN_PCT", 0.8)
     conf_min = _env_float("AGREGACAO_AREA_CONF_MIN", 0.75)
+    area_aninhada = _env_float("AGREGACAO_ANINHADA_AREA_MIN_PCT", 1.5)
+    conf_aninhada = _env_float("AGREGACAO_ANINHADA_CONF_MIN", 0.90)
 
     saudaveis = [
         float(p.get("confianca", 0)) for p in plantas if p.get("classe") == "saudavel"
@@ -98,9 +113,7 @@ def _agregar_por_area(plantas: list[dict]) -> Optional[tuple[str, float]]:
         float(p.get("confianca", 0))
         for p in plantas
         if p.get("classe") != "saudavel"
-        and not p.get("aninhada")
-        and float(p.get("confianca", 0)) >= conf_min
-        and float(p.get("area_pct") or 0) >= area_min
+        and _doente_conta(p, area_min, conf_min, area_aninhada, conf_aninhada)
     ]
     if doentes_uteis:
         return "nao_saudavel", max(doentes_uteis)
