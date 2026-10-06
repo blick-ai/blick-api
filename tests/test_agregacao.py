@@ -74,8 +74,21 @@ def test_area_uma_doente_grande_basta():
     assert confianca == 0.81
 
 
-def test_area_doente_aninhada_nao_conta():
-    plantas = [_planta("saudavel", 0.99, 5.0), _planta("nao_saudavel", 1.0, 2.0, aninhada=True)]
+def test_area_doente_aninhada_pequena_nao_conta():
+    plantas = [_planta("saudavel", 0.99, 5.0), _planta("nao_saudavel", 1.0, 1.0, aninhada=True)]
+    assert agregar_por_planta(plantas)[0] == "saudavel"
+
+
+def test_area_doente_aninhada_grande_e_confiante_conta():
+    plantas = [
+        _planta("saudavel", 0.99, 9.0),
+        _planta("nao_saudavel", 0.9995, 2.433, aninhada=True),
+    ]
+    assert agregar_por_planta(plantas)[0] == "nao_saudavel"
+
+
+def test_area_doente_aninhada_grande_pouco_confiante_nao_conta():
+    plantas = [_planta("saudavel", 0.99, 9.0), _planta("nao_saudavel", 0.8, 3.0, aninhada=True)]
     assert agregar_por_planta(plantas)[0] == "saudavel"
 
 
