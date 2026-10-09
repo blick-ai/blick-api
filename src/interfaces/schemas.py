@@ -129,6 +129,12 @@ class LocalizacaoResponse(BaseModel):
 class PlantaResponse(BaseModel):
     classe: Optional[str] = None
     confianca: Optional[float] = None
+    aninhada: Optional[bool] = None
+    # marcacao da planta na foto, coordenadas normalizadas 0..1
+    # contorno: [[x, y], ...]   caixa: [x1, y1, x2, y2]
+    # capturas antigas (antes das marcacoes) vem sem esses campos (None)
+    contorno: Optional[list[list[float]]] = None
+    caixa: Optional[list[float]] = None
 
 
 class DiagnosticoResponse(BaseModel):
