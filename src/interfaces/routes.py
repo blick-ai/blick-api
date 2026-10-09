@@ -324,7 +324,13 @@ def obter_captura(
         status_processamento=detalhe.status,
         diagnostico=diagnostico,
         plantas=[
-            PlantaResponse(classe=p.get("classe"), confianca=p.get("confianca"))
+            PlantaResponse(
+                classe=p.get("classe"),
+                confianca=p.get("confianca"),
+                aninhada=p.get("aninhada"),
+                contorno=p.get("contorno"),
+                caixa=p.get("caixa"),
+            )
             for p in analise
         ],
         alerta=AlertaResponse(

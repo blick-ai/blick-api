@@ -74,6 +74,16 @@ class ClassificacaoResultado:
             planta["area_pct"] = Decimal(str(round(float(item["area_pct"]), 3)))
         if item.get("aninhada") is not None:
             planta["aninhada"] = bool(item["aninhada"])
+        # marcacao da planta na foto (coordenadas normalizadas 0..1)
+        contorno = item.get("contorno")
+        if contorno:
+            planta["contorno"] = [
+                [Decimal(str(round(float(x), 4))), Decimal(str(round(float(y), 4)))]
+                for x, y in contorno
+            ]
+        caixa = item.get("caixa")
+        if caixa and len(caixa) == 4:
+            planta["caixa"] = [Decimal(str(round(float(v), 4))) for v in caixa]
         return planta
 
 

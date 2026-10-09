@@ -1,7 +1,7 @@
 import io
 from datetime import datetime
 
-from PIL import ExifTags, Image
+from PIL import ExifTags, Image, ImageOps
 
 # limite REAL e rigido do SageMaker Serverless Inference: 4 MB de payload,
 # sem excecao, nao da pra configurar (fonte: docs.aws.amazon.com/sagemaker/
@@ -28,7 +28,12 @@ def redimensionar_para_classificacao(image_bytes: bytes) -> bytes:
     jeito que veio do que travar a captura inteira por causa disso.
     """
     try:
-        imagem_original = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        imagem_original = Image.open(io.BytesIO(image_bytes))
+        # foto de celular guarda os pixels "deitados" e uma tag EXIF diz como
+        # girar; o navegador gira sozinho ao exibir. Giramos aqui tambem, pro
+        # modelo ver a foto em pe e as marcacoes (coordenadas 0..1) casarem
+        # com o que o usuario ve na tela.
+        imagem_original = ImageOps.exif_transpose(imagem_original).convert("RGB")
     except Exception:
         return image_bytes
 
