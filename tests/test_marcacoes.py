@@ -31,7 +31,8 @@ def test_contorno_e_caixa_viram_decimal_no_dynamo():
 
 def test_planta_sem_marcacao_continua_valida():
     # resposta de endpoint antigo ou captura antiga
-    planta = _resultado([{"classe": "nao_saudavel", "confianca": 0.8}]).to_dict()["analise_por_planta"][0]
+    r = _resultado([{"classe": "nao_saudavel", "confianca": 0.8}])
+    planta = r.to_dict()["analise_por_planta"][0]
     assert "contorno" not in planta and "caixa" not in planta
     assert planta["classe"] == "nao_saudavel"
 
