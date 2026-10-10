@@ -115,6 +115,11 @@ class Captura:
     # caso o padrao "rover" e o correto, ja que TODAS as capturas de
     # antes vieram do carrinho mesmo.
     origem: str = "rover"
+    # 1 = a foto foi usada no treino/validacao de algum modelo (saude, milho
+    # ou ambos); 0 = nao foi usada em nenhum treino. Capturas novas nascem 0.
+    # Precisa estar na entidade porque update() regrava o item inteiro
+    # (put_item): sem isso, qualquer reclassificacao apagaria a flag.
+    fl_treino: int = 0
 
     @property
     def pk(self) -> str:
@@ -183,6 +188,7 @@ class Captura:
             "ttl": self.ttl,
             "thumbnail_key": self.thumbnail_key,
             "origem": self.origem,
+            "fl_treino": self.fl_treino,
         }
 
     @staticmethod
@@ -222,4 +228,5 @@ class Captura:
             ttl=item.get("ttl"),
             thumbnail_key=item.get("thumbnail_key"),
             origem=item.get("origem", "rover"),
+            fl_treino=int(item.get("fl_treino", 0)),
         )
