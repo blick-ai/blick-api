@@ -69,6 +69,7 @@ class DynamoCapturaRepository(ICapturaRepository):
         data_fim: str | None = None,
         pagina: int = 1,
         tamanho_pagina: int = 8,
+        fl_treino: int | None = None,
     ) -> tuple[list[Captura], int]:
         pk = f"PLANT#{plantacao_id}"
         key_condition = "PK = :pk"
@@ -105,6 +106,14 @@ class DynamoCapturaRepository(ICapturaRepository):
             # "origem" nao e palavra reservada, filtra direto sem alias
             filtros.append("origem = :origem")
             expr_values[":origem"] = origem
+        if fl_treino is not None:
+            # fl_treino=0 tambem pega itens que ainda nao tem a coluna
+            # (capturas anteriores a flag), senao sumiriam da listagem
+            if fl_treino == 0:
+                filtros.append("(attribute_not_exists(fl_treino) OR fl_treino = :flt)")
+            else:
+                filtros.append("fl_treino = :flt")
+            expr_values[":flt"] = fl_treino
 
         if filtros:
             kwargs["FilterExpression"] = " AND ".join(filtros)

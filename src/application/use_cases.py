@@ -388,6 +388,7 @@ class ListCapturasUseCase:
             data_fim=data_fim,
             pagina=pagina,
             tamanho_pagina=tamanho_pagina,
+            fl_treino=0,  # listagem esconde o que foi usado em treino/validacao
         )
         total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
         return ListCapturasOutputDTO(
@@ -429,6 +430,7 @@ class ListMapaCapturasUseCase:
             status_geral=status_geral,
             pagina=1,
             tamanho_pagina=limite + 1,
+            fl_treino=0,  # mapa acompanha a listagem: sem fotos de treino/validacao
         )
 
         if len(capturas) > limite:

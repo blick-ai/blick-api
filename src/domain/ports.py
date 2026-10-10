@@ -56,9 +56,13 @@ class ICapturaRepository(ABC):
         data_fim: Optional[str] = None,
         pagina: int = 1,
         tamanho_pagina: int = 8,
+        fl_treino: Optional[int] = None,
     ) -> tuple[list[Captura], int]:
         """Retorna (capturas_da_pagina, total_de_capturas_no_filtro), mais
-        recentes primeiro por padrao."""
+        recentes primeiro por padrao. fl_treino=0 devolve so as que NAO
+        foram usadas em treino/validacao (inclui itens sem a coluna);
+        fl_treino=1 so as usadas; None nao filtra (usado pelas rotinas de
+        manutencao, que precisam percorrer tudo)."""
         ...
 
     @abstractmethod
