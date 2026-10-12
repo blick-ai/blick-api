@@ -15,8 +15,9 @@ SEGMENTOS_VARREDURA = 8
 # Indice leve (uma linha pequena por captura) compartilhado por TODAS as
 # chamadas: totais da paginacao e pontos do mapa saem dele, em vez de cada
 # requisicao varrer a tabela inteira de novo. Passou do TTL, a chamada
-# recebe o que ja tem e o indice e renovado em segundo plano.
-TTL_INDICE_SEGUNDOS = 120
+# recebe o que ja tem e o indice e renovado em segundo plano. Escritas
+# feitas por esta task entram no indice na hora (upsert).
+TTL_INDICE_SEGUNDOS = 300
 _LOCK_INDICE = threading.Lock()
 # monotonic() conta desde o boot da maquina: 0.0 pareceria "fresco" num container novo
 _OBSOLETO = float("-inf")
@@ -25,11 +26,12 @@ _OBSOLETO = float("-inf")
 class DynamoCapturaRepository(ICapturaRepository):
     def __init__(self, table_name: str, region: str):
         dynamodb = boto3.resource("dynamodb", region_name=region)
+        self._dynamodb = dynamodb
         self._table = dynamodb.Table(table_name)
 
     def save(self, captura: Captura) -> None:
         self._table.put_item(Item=captura.to_dynamo_item())
-        self._marcar_obsoleto()
+        self._indice_upsert(captura)
 
     def get(self, plantacao_id: str, timestamp: str, captura_id: str) -> Captura | None:
         pk = f"PLANT#{plantacao_id}"
@@ -42,7 +44,7 @@ class DynamoCapturaRepository(ICapturaRepository):
         pk = f"PLANT#{plantacao_id}"
         sk = f"CAPTURA#{timestamp}#{captura_id}"
         self._table.delete_item(Key={"PK": pk, "SK": sk})
-        self._marcar_obsoleto()
+        self._indice_remover(plantacao_id, sk)
 
     def update(self, captura: Captura) -> None:
         # put_item sobrescreve o item inteiro — como Captura.to_dynamo_item()
@@ -50,18 +52,45 @@ class DynamoCapturaRepository(ICapturaRepository):
         # como cliente_id e coordenadas), isso funciona tanto pra criar
         # quanto pra atualizar sem precisar de um UpdateExpression separado.
         self._table.put_item(Item=captura.to_dynamo_item())
-        self._marcar_obsoleto()
+        self._indice_upsert(captura)
 
     def _indices(self) -> dict:
         # setdefault no __dict__: funciona mesmo se o objeto for criado sem __init__ (testes)
         return self.__dict__.setdefault("_indices_dados", {})
 
-    def _marcar_obsoleto(self) -> None:
-        """Chamado em toda escrita: o indice atual passa a ser renovado na
-        proxima leitura (sem apagar, pra ninguem esperar a varredura)."""
-        for entrada in self._indices().values():
-            entrada["versao"] += 1
-            entrada["carregado_em"] = _OBSOLETO
+    @staticmethod
+    def _linha_de(captura: Captura) -> dict:
+        ia = captura.ia_nuvem or {}
+        return {
+            "sk": f"CAPTURA#{captura.timestamp}#{captura.captura_id}",
+            "captura_id": captura.captura_id,
+            "timestamp": captura.timestamp,
+            "status": captura.status,
+            "origem": captura.origem,
+            "fl_treino": int(captura.fl_treino),
+            "latitude": captura.coordenadas.latitude,
+            "longitude": captura.coordenadas.longitude,
+            "status_geral": ia.get("status_geral"),
+        }
+
+    def _indice_upsert(self, captura: Captura) -> None:
+        """Escrita feita aqui entra no indice na hora (sem esperar renovacao)."""
+        entrada = self._indices().get(captura.plantacao_id)
+        if not entrada:
+            return
+        nova = self._linha_de(captura)
+        linhas = [r for r in entrada["linhas"] if r["sk"] != nova["sk"]]
+        linhas.append(nova)
+        linhas.sort(key=lambda r: r["sk"], reverse=True)
+        entrada["linhas"] = linhas  # troca a lista inteira: leitores em andamento nao quebram
+        entrada["versao"] += 1
+
+    def _indice_remover(self, plantacao_id: str, sk: str) -> None:
+        entrada = self._indices().get(plantacao_id)
+        if not entrada:
+            return
+        entrada["linhas"] = [r for r in entrada["linhas"] if r["sk"] != sk]
+        entrada["versao"] += 1
 
     def _carregar_indice(self, plantacao_id: str) -> list[dict]:
         segmentos = self._varrer_paralelo(
@@ -95,11 +124,11 @@ class DynamoCapturaRepository(ICapturaRepository):
         versao = entrada["versao"]
         try:
             linhas = self._carregar_indice(plantacao_id)
-            entrada["linhas"] = linhas
-            # se entrou escrita durante a leitura, continua "velho" e renova de novo
-            entrada["carregado_em"] = (
-                time.monotonic() if entrada["versao"] == versao else _OBSOLETO
-            )
+            # se uma escrita entrou durante a leitura, esta leitura nao a contem:
+            # descarta (o indice atual ja tem a escrita) e tenta de novo depois
+            if entrada["versao"] == versao:
+                entrada["linhas"] = linhas
+                entrada["carregado_em"] = time.monotonic()
         except Exception:
             pass  # mantem o indice antigo; a proxima chamada tenta de novo
         finally:
@@ -202,101 +231,39 @@ class DynamoCapturaRepository(ICapturaRepository):
         tamanho_pagina: int = 8,
         fl_treino: int | None = None,
     ) -> tuple[list[Captura], int]:
-        pk = f"PLANT#{plantacao_id}"
-        key_condition = "PK = :pk"
-        expr_values = {":pk": pk}
-
-        # data_inicio/data_fim no formato "YYYY-MM-DD" — SK comeca com
-        # "CAPTURA#<timestamp ISO>#...", e como ISO8601 ordena
-        # corretamente como string, da pra usar um BETWEEN direto na SK
-        # (parte da key condition, muito mais barato que Scan+filtro)
-        if data_inicio or data_fim:
-            inicio = f"CAPTURA#{data_inicio}" if data_inicio else "CAPTURA#0000-00-00"
-            fim = f"CAPTURA#{data_fim}~" if data_fim else "CAPTURA#9999-99-99~"
-            key_condition += " AND SK BETWEEN :inicio AND :fim"
-            expr_values[":inicio"] = inicio
-            expr_values[":fim"] = fim
-
-        kwargs = {
-            "KeyConditionExpression": key_condition,
-            "ExpressionAttributeValues": expr_values,
-            "ScanIndexForward": False,  # mais recentes primeiro (SK = timestamp)
-        }
-
-        filtros = []
-        if status:
-            # "status" e palavra reservada no DynamoDB, precisa de alias
-            filtros.append("#s = :status")
-            expr_values[":status"] = status
-        if status_geral:
-            # ia_nuvem e um Map (M) no DynamoDB — da pra filtrar direto
-            # no campo aninhado sem precisar de indice novo
-            filtros.append("ia_nuvem.status_geral = :sg")
-            expr_values[":sg"] = status_geral
-        if origem:
-            # "origem" nao e palavra reservada, filtra direto sem alias
-            filtros.append("origem = :origem")
-            expr_values[":origem"] = origem
-        if fl_treino is not None:
-            # fl_treino=0 tambem pega itens que ainda nao tem a coluna
-            # (capturas anteriores a flag), senao sumiriam da listagem
-            if fl_treino == 0:
-                filtros.append("(attribute_not_exists(fl_treino) OR fl_treino = :flt)")
-            else:
-                filtros.append("fl_treino = :flt")
-            expr_values[":flt"] = fl_treino
-
-        if filtros:
-            kwargs["FilterExpression"] = " AND ".join(filtros)
-            if status:
-                kwargs["ExpressionAttributeNames"] = {"#s": "status"}
-
-        # ANTES: buscava TODAS as capturas da plantacao (mesmo pra
-        # mostrar so 8), sempre, em toda chamada — ficava mais lento a
-        # cada captura nova, ate em paginas iniciais. Corrigido ontem
-        # (para assim que tem itens suficientes pra pagina pedida).
-        #
-        # MAS: a contagem do total (pro "1096 resultados" da paginacao)
-        # continuava rodando numa consulta SEPARADA, DEPOIS da coleta —
-        # sequencial, dobrando o tempo total mesmo com as duas consultas
-        # sendo independentes uma da outra. Agora rodam em PARALELO
-        # (thread separada pra cada), cortando o tempo pela metade.
-        itens_necessarios = pagina * tamanho_pagina
-
-        def _coletar_pagina():
-            coletadas = []
-            kwargs_local = dict(kwargs)
-            while len(coletadas) < itens_necessarios:
-                response = self._table.query(**kwargs_local)
-                coletadas.extend(
-                    Captura.from_dynamo_item(item) for item in response.get("Items", [])
-                )
-                if "LastEvaluatedKey" not in response:
-                    break
-                kwargs_local["ExclusiveStartKey"] = response["LastEvaluatedKey"]
-            return coletadas
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            futuro_dados = executor.submit(_coletar_pagina)
-            futuro_total = executor.submit(
-                self._contar_total, plantacao_id, status, status_geral, origem,
-                data_inicio, data_fim, fl_treino,
-            )
-            coletadas = futuro_dados.result()
-            total = futuro_total.result()
-
-        inicio_idx = (pagina - 1) * tamanho_pagina
-        capturas_da_pagina = coletadas[inicio_idx: inicio_idx + tamanho_pagina]
-
-        return capturas_da_pagina, total
-
-    def _contar_total(self, plantacao_id, status, status_geral, origem,
-                      data_inicio, data_fim, fl_treino) -> int:
-        return sum(
-            1 for linha in self._indice(plantacao_id)
+        """Quem passa no filtro e o total saem do indice leve (memoria); do
+        Dynamo vem so a pagina pedida, por chave (BatchGetItem). Antes cada
+        filtro virava uma Query que lia item por item ate achar resultados,
+        e chegava a varrer metade da tabela pra achar 1 captura rara."""
+        linhas = [
+            linha for linha in self._indice(plantacao_id)
             if self._passa_filtros(linha, status, status_geral, origem,
                                    data_inicio, data_fim, fl_treino)
-        )
+        ]
+        inicio = (pagina - 1) * tamanho_pagina
+        return self._buscar_por_chave(plantacao_id, linhas[inicio: inicio + tamanho_pagina]), \
+            len(linhas)
+
+    def _buscar_por_chave(self, plantacao_id: str, linhas: list[dict]) -> list[Captura]:
+        if not linhas:
+            return []
+        pk = f"PLANT#{plantacao_id}"
+        nome = self._table.name
+        por_sk: dict[str, dict] = {}
+        for i in range(0, len(linhas), 100):  # limite do BatchGetItem: 100 chaves
+            chaves = [{"PK": pk, "SK": linha["sk"]} for linha in linhas[i:i + 100]]
+            pedido = {nome: {"Keys": chaves}}
+            while pedido:
+                resposta = self._dynamodb.batch_get_item(RequestItems=pedido)
+                for item in resposta.get("Responses", {}).get(nome, []):
+                    por_sk[item["SK"]] = item
+                pedido = resposta.get("UnprocessedKeys") or None
+                if pedido:
+                    time.sleep(0.05)
+        # a ordem do BatchGetItem nao e garantida: mantem a do indice (mais novas primeiro);
+        # item que sumiu da tabela e ainda estava no indice e ignorado
+        return [Captura.from_dynamo_item(por_sk[linha["sk"]])
+                for linha in linhas if linha["sk"] in por_sk]
 
     def list_pontos_mapa(
         self,
