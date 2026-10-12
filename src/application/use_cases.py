@@ -389,6 +389,7 @@ class ListCapturasUseCase:
             pagina=pagina,
             tamanho_pagina=tamanho_pagina,
             fl_treino=0,  # listagem esconde o que foi usado em treino/validacao
+            completo=False,  # a tela nao usa o detalhe por planta; deixa a pagina leve
         )
         total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
         return ListCapturasOutputDTO(
