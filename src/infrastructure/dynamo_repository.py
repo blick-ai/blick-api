@@ -19,6 +19,17 @@ SEGMENTOS_VARREDURA = 8
 # feitas por esta task entram no indice na hora (upsert).
 TTL_INDICE_SEGUNDOS = 300
 _LOCK_INDICE = threading.Lock()
+# Campos da captura SEM o detalhe por planta de ia_nuvem (contornos, ~30 KB por captura).
+# "timestamp", "status" e "ttl" sao palavras reservadas do DynamoDB, entram por apelido.
+PROJECAO_LISTAGEM = {
+    "ProjectionExpression": (
+        "PK, SK, plantacao_id, captura_id, cliente_id, carrinho_id, GSI1PK, #ts, coordenadas, "
+        "s3_bucket, s3_key, jetson_nano, #st, status_history, erro_detalhes, alerta_emitido, "
+        "alerta_emitido_em, #ttl, thumbnail_key, origem, fl_treino, "
+        "ia_nuvem.status_geral, ia_nuvem.confianca_status_geral"
+    ),
+    "ExpressionAttributeNames": {"#ts": "timestamp", "#st": "status", "#ttl": "ttl"},
+}
 # monotonic() conta desde o boot da maquina: 0.0 pareceria "fresco" num container novo
 _OBSOLETO = float("-inf")
 
@@ -161,7 +172,7 @@ class DynamoCapturaRepository(ICapturaRepository):
         """Mesma regra dos filtros da consulta, aplicada ao indice em memoria."""
         if status and linha["status"] != status:
             return False
-        if status_geral and linha["status_geral"] != status_geral:
+        if status_geral and linha["status_geral"] not in status_geral.split(","):
             return False
         if origem and linha["origem"] != origem:
             return False
@@ -230,8 +241,13 @@ class DynamoCapturaRepository(ICapturaRepository):
         pagina: int = 1,
         tamanho_pagina: int = 8,
         fl_treino: int | None = None,
+        completo: bool = True,
     ) -> tuple[list[Captura], int]:
-        """Quem passa no filtro e o total saem do indice leve (memoria); do
+        """completo=False e so pra listagem de tela: traz a captura sem o detalhe por
+        planta (contornos), que e o que pesa. Quem le a captura pra gravar de volta
+        (reclassificar, backfill) precisa do default, completo=True.
+
+        Quem passa no filtro e o total saem do indice leve (memoria); do
         Dynamo vem so a pagina pedida, por chave (BatchGetItem). Antes cada
         filtro virava uma Query que lia item por item ate achar resultados,
         e chegava a varrer metade da tabela pra achar 1 captura rara."""
@@ -241,10 +257,12 @@ class DynamoCapturaRepository(ICapturaRepository):
                                    data_inicio, data_fim, fl_treino)
         ]
         inicio = (pagina - 1) * tamanho_pagina
-        return self._buscar_por_chave(plantacao_id, linhas[inicio: inicio + tamanho_pagina]), \
-            len(linhas)
+        pagina_de_linhas = linhas[inicio: inicio + tamanho_pagina]
+        return self._buscar_por_chave(plantacao_id, pagina_de_linhas, completo), len(linhas)
 
-    def _buscar_por_chave(self, plantacao_id: str, linhas: list[dict]) -> list[Captura]:
+    def _buscar_por_chave(
+        self, plantacao_id: str, linhas: list[dict], completo: bool = True
+    ) -> list[Captura]:
         if not linhas:
             return []
         pk = f"PLANT#{plantacao_id}"
@@ -253,6 +271,8 @@ class DynamoCapturaRepository(ICapturaRepository):
         for i in range(0, len(linhas), 100):  # limite do BatchGetItem: 100 chaves
             chaves = [{"PK": pk, "SK": linha["sk"]} for linha in linhas[i:i + 100]]
             pedido = {nome: {"Keys": chaves}}
+            if not completo:
+                pedido[nome].update(PROJECAO_LISTAGEM)
             while pedido:
                 resposta = self._dynamodb.batch_get_item(RequestItems=pedido)
                 for item in resposta.get("Responses", {}).get(nome, []):

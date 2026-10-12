@@ -103,6 +103,34 @@ def test_filtros_valem_igual_a_consulta_antiga(monkeypatch):
     assert _ids(repo, data_inicio="2026-09-30", data_fim="2026-10-01") == (["c", "b"], 2)
 
 
+def test_status_geral_aceita_varios_valores_separados_por_virgula(monkeypatch):
+    repo = _repo(ITENS, monkeypatch)
+
+    # o front pede "saudavel,nao_saudavel" numa chamada so, em vez de duas de 100 itens
+    assert _ids(repo, status_geral="saudavel,nao_saudavel", fl_treino=0) == (["b", "a"], 2)
+    assert _ids(repo, status_geral="nao_saudavel") == (["c", "b"], 2)
+    assert _ids(repo, status_geral="saudavel") == (["a"], 1)
+
+
+def test_listagem_leve_nao_busca_o_detalhe_por_planta(monkeypatch):
+    repo = _repo(ITENS, monkeypatch)
+
+    repo.list_by_plantacao(plantacao_id="p1", tamanho_pagina=2, completo=False)
+    leve = repo._dynamodb.pedidos[-1]["blick-table"]
+    assert "analise_por_planta" not in leve["ProjectionExpression"]
+    assert "ia_nuvem.status_geral" in leve["ProjectionExpression"]
+    # palavras reservadas do DynamoDB entram por apelido, senao a consulta falha
+    assert leve["ExpressionAttributeNames"] == {
+        "#ts": "timestamp", "#st": "status", "#ttl": "ttl"}
+    for campo in ("#ts", "#st", "#ttl", "s3_key", "jetson_nano", "cliente_id", "GSI1PK"):
+        assert campo in leve["ProjectionExpression"]
+
+    repo.list_by_plantacao(plantacao_id="p1", tamanho_pagina=2)  # padrao: completo
+    completo = repo._dynamodb.pedidos[-1]["blick-table"]
+    # reclassificar/backfill gravam a captura de volta: tem que vir inteira
+    assert "ProjectionExpression" not in completo
+
+
 def test_paginacao_pega_so_a_fatia_e_busca_so_ela_por_chave(monkeypatch):
     repo = _repo(ITENS, monkeypatch)
 
@@ -240,8 +268,10 @@ def test_listagem_e_mapa_escondem_treino_e_manutencao_nao():
 
     listagem, mapa, manutencao = repo.chamadas
     assert listagem["fl_treino"] == 0
+    assert listagem["completo"] is False  # a tela nao precisa dos contornos
     assert mapa["fl_treino"] == 0
     assert "fl_treino" not in manutencao  # a reclassificacao precisa ver tudo
+    assert "completo" not in manutencao  # e precisa da captura inteira, pra gravar de volta
 
 
 def test_mapa_monta_pontos_e_pula_sem_coordenada():
