@@ -5,7 +5,17 @@ Fica aqui na API (e nao so no SageMaker) pra poder ser ajustada sem
 reempacotar o modelo: o endpoint devolve o detalhe por planta
 (analise_por_planta) e a API decide o status geral da foto.
 
-Regra:
+REGRA PADRAO ("qualquer doente"): se o modelo achou UMA planta nao_saudavel na
+foto, a foto e nao_saudavel. Sem limite de confianca, de area ou de quantidade,
+e plantas aninhadas tambem contam. E uma regra de triagem: nao deixa passar
+nada, e a conferencia de qual planta esta doente e feita olhando as marcacoes
+no front. Foto so e saudavel se todas as plantas achadas forem saudaveis.
+
+As regras antigas por limiar continuam no arquivo e voltam com a variavel
+  AGREGACAO_MODO=limiar
+(ou passando conf_min / n_min / fracao_min explicitamente na chamada).
+
+Regras por limiar (so valem com AGREGACAO_MODO=limiar):
   1. planta nao_saudavel com confianca < conf_min e descartada (nao conta)
   2. a foto e nao_saudavel se
        (doentes validas >= n_min)  E  (fracao >= fracao_min)
@@ -50,6 +60,23 @@ def _env_int(nome: str, padrao: int) -> int:
         return padrao
 
 
+def agregar_qualquer_doente(plantas: list[dict]) -> Optional[tuple[str, float]]:
+    """Uma planta nao_saudavel basta pra foto ser nao_saudavel.
+
+    Confianca devolvida: a maior entre as doentes (nao_saudavel) ou a media das
+    saudaveis (saudavel). None se nao ha nenhuma planta com classe conhecida.
+    """
+    saudaveis = [float(p.get("confianca", 0)) for p in plantas if p.get("classe") == "saudavel"]
+    doentes = [
+        float(p.get("confianca", 0)) for p in plantas if p.get("classe") == "nao_saudavel"
+    ]
+    if doentes:
+        return "nao_saudavel", max(doentes)
+    if saudaveis:
+        return "saudavel", sum(saudaveis) / len(saudaveis)
+    return None
+
+
 def agregar_por_planta(
     plantas: list[dict],
     conf_min: Optional[float] = None,
@@ -60,7 +87,23 @@ def agregar_por_planta(
     plantas: [{"classe": "saudavel"|"nao_saudavel", "confianca": float}, ...]
     Retorna (status_geral, confianca) ou None se nao sobrou nenhuma planta
     valida pra decidir (quem chamou mantem o status que ja tinha).
+
+    Padrao: qualquer planta doente torna a foto nao_saudavel. Usa as regras por
+    limiar so com AGREGACAO_MODO=limiar ou quando algum limiar vem explicito.
     """
+    explicito = conf_min is not None or n_min is not None or fracao_min is not None
+    if not explicito and os.getenv("AGREGACAO_MODO", "qualquer").strip().lower() != "limiar":
+        return agregar_qualquer_doente(plantas)
+    return agregar_por_limiar(plantas, conf_min, n_min, fracao_min)
+
+
+def agregar_por_limiar(
+    plantas: list[dict],
+    conf_min: Optional[float] = None,
+    n_min: Optional[int] = None,
+    fracao_min: Optional[float] = None,
+) -> Optional[tuple[str, float]]:
+    """Regras antigas (confianca minima, n minimo, fracao, area)."""
     conf_min = _env_float("AGREGACAO_CONF_MIN", 0.90) if conf_min is None else conf_min
     n_min = _env_int("AGREGACAO_N_MIN", 2) if n_min is None else n_min
     fracao_min = (
