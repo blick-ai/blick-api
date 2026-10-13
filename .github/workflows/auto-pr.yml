@@ -2,10 +2,10 @@ name: Auto PR to Develop
 
 on:
   push:
-    branches:
-      - 'feature/**'
-      - 'fix/**'
-      - 'chore/**'
+    branches-ignore:
+      - develop
+      - main
+      - master
 
 jobs:
   create-pr:
