@@ -1,4 +1,13 @@
+import pytest
+
 from domain.agregacao import agregar_por_planta
+
+
+@pytest.fixture(autouse=True)
+def _modo_limiar(monkeypatch):
+    # estes testes cobrem as regras antigas por limiar; o padrao novo
+    # ("qualquer doente") esta em test_agregacao_qualquer.py
+    monkeypatch.setenv("AGREGACAO_MODO", "limiar")
 
 
 def _plantas(saudaveis, doentes):
