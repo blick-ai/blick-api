@@ -23,6 +23,7 @@ from domain.exceptions import (
     BlickUserAlreadyExistsError,
     BlickUserNotConfirmedError,
 )
+from domain.exibicao_plantas import plantas_para_exibicao
 from infrastructure.cognito_auth import CognitoAuthService
 from interfaces.dependencies import (
     get_auth_service,
@@ -289,6 +290,19 @@ def mapa_capturas(
         raise HTTPException(status_code=422, detail=str(e))
 
 
+def _plantas_resposta(analise: list[dict]) -> list[PlantaResponse]:
+    return [
+        PlantaResponse(
+            classe=p.get("classe"),
+            confianca=p.get("confianca"),
+            aninhada=p.get("aninhada"),
+            contorno=p.get("contorno"),
+            caixa=p.get("caixa"),
+        )
+        for p in plantas_para_exibicao(analise)
+    ]
+
+
 @router.get("/capturas/{captura_id}", response_model=CapturaDetalheResponse)
 def obter_captura(
     captura_id: str,
@@ -326,16 +340,7 @@ def obter_captura(
         ),
         status_processamento=detalhe.status,
         diagnostico=diagnostico,
-        plantas=[
-            PlantaResponse(
-                classe=p.get("classe"),
-                confianca=p.get("confianca"),
-                aninhada=p.get("aninhada"),
-                contorno=p.get("contorno"),
-                caixa=p.get("caixa"),
-            )
-            for p in analise
-        ],
+        plantas=_plantas_resposta(analise),
         alerta=AlertaResponse(
             emitido=detalhe.alerta_emitido,
             ultima_emissao=detalhe.alerta_emitido_em,
