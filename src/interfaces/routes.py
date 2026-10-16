@@ -241,6 +241,7 @@ def listar_capturas(
         data_fim=data_fim,
         pagina=pagina,
         tamanho_pagina=tamanho_pagina,
+        cliente_id=cliente_id,
     )
     return ListCapturasResponse(
         capturas=[
@@ -281,7 +282,9 @@ def mapa_capturas(
     use_case: ListMapaCapturasUseCase = Depends(get_list_mapa_capturas_use_case),
 ):
     try:
-        return use_case.execute(plantacao_id=plantacao_id, status_geral=status_geral)
+        return use_case.execute(
+            plantacao_id=plantacao_id, status_geral=status_geral, cliente_id=cliente_id
+        )
     except MapaLimiteExcedidoError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -294,7 +297,7 @@ def obter_captura(
     cliente_id: str = Depends(get_current_cliente_id),
     use_case: GetCapturaUseCase = Depends(get_captura_use_case),
 ):
-    detalhe = use_case.execute(plantacao_id, timestamp, captura_id)
+    detalhe = use_case.execute(plantacao_id, timestamp, captura_id, cliente_id=cliente_id)
     if detalhe is None:
         raise HTTPException(status_code=404, detail="Captura não encontrada")
 
@@ -353,7 +356,7 @@ def deletar_captura(
     cliente_id: str = Depends(get_current_cliente_id),
     use_case: DeletarCapturaUseCase = Depends(get_deletar_captura_use_case),
 ):
-    excluida = use_case.execute(plantacao_id, timestamp, captura_id)
+    excluida = use_case.execute(plantacao_id, timestamp, captura_id, cliente_id=cliente_id)
     if not excluida:
         raise HTTPException(status_code=404, detail="Captura não encontrada")
 

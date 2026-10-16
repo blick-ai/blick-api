@@ -157,12 +157,12 @@ def test_varias_listagens_dividem_uma_unica_leitura_da_tabela(monkeypatch):
     assert "analise_por_planta" not in kw["ProjectionExpression"]
 
 
-def _captura_falsa(captura_id, timestamp, status_geral="saudavel", fl_treino=0):
+def _captura_falsa(captura_id, timestamp, status_geral="saudavel", fl_treino=0, cliente_id="u1"):
     from types import SimpleNamespace
 
     return SimpleNamespace(
         captura_id=captura_id, timestamp=timestamp, plantacao_id="p1", status="CONCLUIDO",
-        origem="rover", fl_treino=fl_treino,
+        origem="rover", fl_treino=fl_treino, cliente_id=cliente_id,
         coordenadas=SimpleNamespace(latitude=5, longitude=6),
         ia_nuvem={"status_geral": status_geral},
         to_dynamo_item=lambda: {"SK": f"CAPTURA#{timestamp}#{captura_id}",

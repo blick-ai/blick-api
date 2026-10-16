@@ -1,4 +1,5 @@
 import base64
+import logging
 import uuid
 from datetime import datetime
 
@@ -32,6 +33,8 @@ from domain.ports import (
 
 MOCK_PLANTACAO_ID = "plantacao-mock-001"
 MOCK_CARRINHO_ID = "carrinho-mock-001"
+
+logger = logging.getLogger(__name__)
 
 
 class SubmitCapturaUseCase:
@@ -195,7 +198,10 @@ class ClassifyCapturaUseCase:
         self._email_service = email_service
         self._user_lookup = user_lookup
 
-    def execute(self, plantacao_id: str, timestamp: str, captura_id: str) -> Captura:
+    def execute(
+        self, plantacao_id: str, timestamp: str, captura_id: str, notificar: bool = True
+    ) -> Captura:
+        """notificar=False e pra reprocessamento em lote: nao manda email a ninguem."""
         captura = self._repository.get(plantacao_id, timestamp, captura_id)
         if captura is None:
             raise ValueError(f"Captura não encontrada: {captura_id}")
@@ -224,38 +230,51 @@ class ClassifyCapturaUseCase:
 
         self._repository.update(captura)
 
-        if (
-            resultado.status_geral == "nao_milho"
-            and captura.origem == "manual"
-            and self._email_service is not None
-            and self._user_lookup is not None
-        ):
+        if resultado.status_geral == "nao_milho" and self._deve_notificar(captura, notificar):
             self._avisar_captura_invalida(captura)
 
         return captura
 
-    def _avisar_captura_invalida(self, captura: Captura) -> None:
+    def _deve_notificar(self, captura: Captura, notificar: bool) -> bool:
+        # so upload manual: o rover manda centenas de fotos por varredura e
+        # nao tem uma pessoa esperando o resultado
+        return (
+            notificar
+            and captura.origem == "manual"
+            and self._email_service is not None
+            and self._user_lookup is not None
+        )
+
+    def _enviar_aviso(self, captura: Captura, assunto: str, paragrafos: list[str]) -> None:
         try:
             email = self._user_lookup.obter_email(captura.cliente_id)
             if not email:
                 return
 
-            assunto = "Blick — sua captura não foi reconhecida como milho"
-            corpo = (
-                f"Olá,\n\n"
-                f"A foto que você enviou (captura {captura.captura_id}) não foi "
-                f"reconhecida como uma planta de milho válida pelo nosso modelo "
-                f"de classificação.\n\n"
-                f"Isso costuma acontecer quando a foto está com pouca luz, "
-                f"desfocada, tirada de um ângulo muito distante, ou não mostra "
-                f"a planta claramente.\n\n"
-                f"Recomendamos enviar uma nova captura, com boa iluminação e "
-                f"enquadrando bem a folha ou a planta de milho.\n\n"
-                f"— Equipe Blick"
+            corpo_texto = "\n\n".join(["Olá,", *paragrafos, "Equipe Blick"])
+            corpo_html = (
+                "<p>Olá,</p>" + "".join(f"<p>{p}</p>" for p in paragrafos) + "<p>Equipe Blick</p>"
             )
-            self._email_service.enviar_email(email, assunto, corpo)
+            self._email_service.enviar_email(email, assunto, corpo_texto, corpo_html)
         except Exception:
-            pass
+            # aviso e opcional: nunca derruba a classificacao, mas deixa rastro
+            # no log (antes era silencioso e escondia permissao faltando)
+            logger.exception("falha ao enviar aviso da captura %s", captura.captura_id)
+
+    def _avisar_captura_invalida(self, captura: Captura) -> None:
+        self._enviar_aviso(
+            captura,
+            "Blick: sua captura não foi reconhecida como milho",
+            [
+                f"A foto que você enviou (captura {captura.captura_id}) não foi "
+                "reconhecida como uma planta de milho pelo nosso modelo.",
+                "Isso costuma acontecer quando a foto está com pouca luz, "
+                "desfocada, tirada de um ângulo muito distante, ou não mostra "
+                "a planta claramente.",
+                "Recomendamos enviar uma nova captura, com boa iluminação e "
+                "enquadrando bem a folha ou a planta de milho.",
+            ],
+        )
 
 
 class ClassifyPendentesUseCase:
@@ -306,7 +325,8 @@ class ReclassificarTodasUseCase:
         for captura in capturas:
             try:
                 self._classify_use_case.execute(
-                    captura.plantacao_id, captura.timestamp, captura.captura_id
+                    captura.plantacao_id, captura.timestamp, captura.captura_id,
+                    notificar=False,  # reprocessamento em lote nao manda email
                 )
                 processadas += 1
             except Exception:
@@ -378,6 +398,7 @@ class ListCapturasUseCase:
         data_fim: str | None = None,
         pagina: int = 1,
         tamanho_pagina: int = 8,
+        cliente_id: str | None = None,
     ) -> ListCapturasOutputDTO:
         capturas, total = self._repository.list_by_plantacao(
             plantacao_id=plantacao_id,
@@ -390,6 +411,7 @@ class ListCapturasUseCase:
             tamanho_pagina=tamanho_pagina,
             fl_treino=0,  # listagem esconde o que foi usado em treino/validacao
             completo=False,  # a tela nao usa o detalhe por planta; deixa a pagina leve
+            cliente_id=cliente_id,  # cada usuario ve so as capturas dele
         )
         total_paginas = (total + tamanho_pagina - 1) // tamanho_pagina if total > 0 else 0
         return ListCapturasOutputDTO(
@@ -425,11 +447,13 @@ class ListMapaCapturasUseCase:
         plantacao_id: str = MOCK_PLANTACAO_ID,
         status_geral: str | None = None,
         limite: int = LIMITE_PONTOS_MAPA,
+        cliente_id: str | None = None,
     ) -> dict:
         itens = self._repository.list_pontos_mapa(
             plantacao_id=plantacao_id,
             status_geral=status_geral,
             fl_treino=0,  # mapa acompanha a listagem: sem fotos de treino/validacao
+            cliente_id=cliente_id,  # e so com os pontos do proprio usuario
         )
 
         if len(itens) > limite:
@@ -464,11 +488,14 @@ class GetCapturaUseCase:
         self._storage = storage
 
     def execute(
-        self, plantacao_id: str, timestamp: str, captura_id: str
+        self, plantacao_id: str, timestamp: str, captura_id: str,
+        cliente_id: str | None = None,
     ) -> CapturaDetalheDTO | None:
         captura = self._repository.get(plantacao_id, timestamp, captura_id)
         if captura is None:
             return None
+        if cliente_id is not None and captura.cliente_id != cliente_id:
+            return None  # captura de outro usuario: pra quem pede, e como se nao existisse
 
         ia = captura.ia_nuvem or {}
         probabilidades = ia.get("probabilidades")
@@ -522,10 +549,15 @@ class DeletarCapturaUseCase:
         self._repository = repository
         self._storage = storage
 
-    def execute(self, plantacao_id: str, timestamp: str, captura_id: str) -> bool:
+    def execute(
+        self, plantacao_id: str, timestamp: str, captura_id: str,
+        cliente_id: str | None = None,
+    ) -> bool:
         captura = self._repository.get(plantacao_id, timestamp, captura_id)
         if captura is None:
             return False
+        if cliente_id is not None and captura.cliente_id != cliente_id:
+            return False  # nao apaga captura de outro usuario
 
         self._repository.delete(plantacao_id, timestamp, captura_id)
 

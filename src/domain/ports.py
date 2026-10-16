@@ -58,6 +58,7 @@ class ICapturaRepository(ABC):
         tamanho_pagina: int = 8,
         fl_treino: Optional[int] = None,
         completo: bool = True,
+        cliente_id: Optional[str] = None,
     ) -> tuple[list[Captura], int]:
         """Retorna (capturas_da_pagina, total_de_capturas_no_filtro), mais
         recentes primeiro por padrao. fl_treino=0 devolve so as que NAO
@@ -74,6 +75,7 @@ class ICapturaRepository(ABC):
         plantacao_id: str,
         status_geral: Optional[str] = None,
         fl_treino: Optional[int] = None,
+        cliente_id: Optional[str] = None,
     ) -> list[dict]:
         """Pontos leves pro mapa (captura_id, timestamp, latitude, longitude,
         status_geral), mais recentes primeiro, sem carregar o item inteiro."""
