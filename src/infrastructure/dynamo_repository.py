@@ -79,6 +79,7 @@ class DynamoCapturaRepository(ICapturaRepository):
             "status": captura.status,
             "origem": captura.origem,
             "fl_treino": int(captura.fl_treino),
+            "cliente_id": captura.cliente_id,
             "latitude": captura.coordenadas.latitude,
             "longitude": captura.coordenadas.longitude,
             "status_geral": ia.get("status_geral"),
@@ -109,7 +110,8 @@ class DynamoCapturaRepository(ICapturaRepository):
             ExpressionAttributeValues={":pk": f"PLANT#{plantacao_id}", ":pref": "CAPTURA#"},
             ExpressionAttributeNames={"#ts": "timestamp", "#st": "status"},
             ProjectionExpression=(
-                "SK, captura_id, #ts, #st, origem, fl_treino, coordenadas, ia_nuvem.status_geral"
+                "SK, captura_id, #ts, #st, origem, fl_treino, cliente_id, coordenadas, "
+                "ia_nuvem.status_geral"
             ),
         )
         linhas = []
@@ -123,6 +125,7 @@ class DynamoCapturaRepository(ICapturaRepository):
                     "status": it.get("status"),
                     "origem": it.get("origem"),
                     "fl_treino": int(it.get("fl_treino", 0)),
+                    "cliente_id": it.get("cliente_id"),
                     "latitude": coord.get("latitude"),
                     "longitude": coord.get("longitude"),
                     "status_geral": (it.get("ia_nuvem") or {}).get("status_geral"),
@@ -168,8 +171,13 @@ class DynamoCapturaRepository(ICapturaRepository):
             return linhas
 
     @staticmethod
-    def _passa_filtros(linha, status, status_geral, origem, data_inicio, data_fim, fl_treino):
-        """Mesma regra dos filtros da consulta, aplicada ao indice em memoria."""
+    def _passa_filtros(linha, status, status_geral, origem, data_inicio, data_fim, fl_treino,
+                       cliente_id=None):
+        """Mesma regra dos filtros da consulta, aplicada ao indice em memoria.
+        cliente_id=None nao filtra (rotinas de manutencao); preenchido, so passa
+        quem pertence a esse usuario (linha sem dono nunca passa)."""
+        if cliente_id is not None and linha.get("cliente_id") != cliente_id:
+            return False
         if status and linha["status"] != status:
             return False
         if status_geral and linha["status_geral"] not in status_geral.split(","):
@@ -242,6 +250,7 @@ class DynamoCapturaRepository(ICapturaRepository):
         tamanho_pagina: int = 8,
         fl_treino: int | None = None,
         completo: bool = True,
+        cliente_id: str | None = None,
     ) -> tuple[list[Captura], int]:
         """completo=False e so pra listagem de tela: traz a captura sem o detalhe por
         planta (contornos), que e o que pesa. Quem le a captura pra gravar de volta
@@ -254,7 +263,7 @@ class DynamoCapturaRepository(ICapturaRepository):
         linhas = [
             linha for linha in self._indice(plantacao_id)
             if self._passa_filtros(linha, status, status_geral, origem,
-                                   data_inicio, data_fim, fl_treino)
+                                   data_inicio, data_fim, fl_treino, cliente_id)
         ]
         inicio = (pagina - 1) * tamanho_pagina
         pagina_de_linhas = linhas[inicio: inicio + tamanho_pagina]
@@ -290,6 +299,7 @@ class DynamoCapturaRepository(ICapturaRepository):
         plantacao_id: str,
         status_geral: str | None = None,
         fl_treino: int | None = None,
+        cliente_id: str | None = None,
     ) -> list[dict]:
         """Pontos enxutos pro mapa (captura_id, timestamp, latitude, longitude,
         status_geral), mais recentes primeiro, vindos do indice leve."""
@@ -297,7 +307,8 @@ class DynamoCapturaRepository(ICapturaRepository):
             {k: linha[k] for k in
              ("captura_id", "timestamp", "latitude", "longitude", "status_geral")}
             for linha in self._indice(plantacao_id)
-            if self._passa_filtros(linha, None, status_geral, None, None, None, fl_treino)
+            if self._passa_filtros(linha, None, status_geral, None, None, None, fl_treino,
+                                   cliente_id)
         ]
 
     def list_cliente_ids(self) -> list[str]:
