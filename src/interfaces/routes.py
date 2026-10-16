@@ -275,7 +275,7 @@ def mapa_capturas(
         alias="statusGeral",
         description=(
             "Filtra por saudavel, nao_saudavel ou nao_milho. "
-            "Sem filtro, devolve todos com coordenada."
+            "Sem filtro, devolve saudavel e nao_saudavel com coordenada."
         ),
     ),
     cliente_id: str = Depends(get_current_cliente_id),
