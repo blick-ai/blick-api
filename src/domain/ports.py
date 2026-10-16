@@ -128,10 +128,7 @@ class IEmailService(ABC):
         assunto: str,
         corpo_texto: str,
         corpo_html: str | None = None,
-        imagem_jpeg: bytes | None = None,
     ) -> None:
-        """Se imagem_jpeg vier preenchida, ela vai embutida no corpo (cid:foto
-        no HTML) e tambem aparece como anexo pra baixar."""
         ...
 
 

@@ -198,7 +198,10 @@ class ClassifyCapturaUseCase:
         self._email_service = email_service
         self._user_lookup = user_lookup
 
-    def execute(self, plantacao_id: str, timestamp: str, captura_id: str) -> Captura:
+    def execute(
+        self, plantacao_id: str, timestamp: str, captura_id: str, notificar: bool = True
+    ) -> Captura:
+        """notificar=False e pra reprocessamento em lote: nao manda email a ninguem."""
         captura = self._repository.get(plantacao_id, timestamp, captura_id)
         if captura is None:
             raise ValueError(f"Captura não encontrada: {captura_id}")
@@ -227,62 +230,51 @@ class ClassifyCapturaUseCase:
 
         self._repository.update(captura)
 
-        if (
-            resultado.status_geral == "nao_milho"
-            and captura.origem == "manual"
-            and self._email_service is not None
-            and self._user_lookup is not None
-        ):
-            self._avisar_captura_invalida(captura, image_bytes)
+        if resultado.status_geral == "nao_milho" and self._deve_notificar(captura, notificar):
+            self._avisar_captura_invalida(captura)
 
         return captura
 
-    def _avisar_captura_invalida(self, captura: Captura, imagem_jpeg: bytes | None = None) -> None:
-        # imagem_jpeg ja vem redimensionada (ate ~3 MB), entao cabe com folga
-        # no limite de 10 MB do SES mesmo depois do base64
+    def _deve_notificar(self, captura: Captura, notificar: bool) -> bool:
+        # so upload manual: o rover manda centenas de fotos por varredura e
+        # nao tem uma pessoa esperando o resultado
+        return (
+            notificar
+            and captura.origem == "manual"
+            and self._email_service is not None
+            and self._user_lookup is not None
+        )
+
+    def _enviar_aviso(self, captura: Captura, assunto: str, paragrafos: list[str]) -> None:
         try:
             email = self._user_lookup.obter_email(captura.cliente_id)
             if not email:
                 return
 
-            assunto = "Blick: sua captura não foi reconhecida como milho"
-            corpo_texto = (
-                "Olá,\n\n"
-                f"A foto que você enviou (captura {captura.captura_id}) não foi "
-                "reconhecida como uma planta de milho pelo nosso modelo. A foto "
-                "está anexada a este email.\n\n"
-                "Isso costuma acontecer quando a foto está com pouca luz, "
-                "desfocada, tirada de um ângulo muito distante, ou não mostra "
-                "a planta claramente.\n\n"
-                "Recomendamos enviar uma nova captura, com boa iluminação e "
-                "enquadrando bem a folha ou a planta de milho.\n\n"
-                "Equipe Blick"
-            )
-            foto_html = (
-                '<p><img src="cid:foto" alt="Foto enviada" '
-                'style="max-width:480px;width:100%;border-radius:6px"></p>'
-                if imagem_jpeg
-                else ""
-            )
+            corpo_texto = "\n\n".join(["Olá,", *paragrafos, "Equipe Blick"])
             corpo_html = (
-                "<p>Olá,</p>"
-                f"<p>A foto que você enviou (captura <b>{captura.captura_id}</b>) "
-                "não foi reconhecida como uma planta de milho pelo nosso modelo.</p>"
-                f"{foto_html}"
-                "<p>Isso costuma acontecer quando a foto está com pouca luz, "
-                "desfocada, tirada de um ângulo muito distante, ou não mostra "
-                "a planta claramente.</p>"
-                "<p>Recomendamos enviar uma nova captura, com boa iluminação e "
-                "enquadrando bem a folha ou a planta de milho.</p>"
-                "<p>Equipe Blick</p>"
+                "<p>Olá,</p>" + "".join(f"<p>{p}</p>" for p in paragrafos) + "<p>Equipe Blick</p>"
             )
-            self._email_service.enviar_email(
-                email, assunto, corpo_texto, corpo_html, imagem_jpeg=imagem_jpeg
-            )
+            self._email_service.enviar_email(email, assunto, corpo_texto, corpo_html)
         except Exception:
             # aviso e opcional: nunca derruba a classificacao, mas deixa rastro
             # no log (antes era silencioso e escondia permissao faltando)
-            logger.exception("falha ao enviar aviso de captura nao-milho %s", captura.captura_id)
+            logger.exception("falha ao enviar aviso da captura %s", captura.captura_id)
+
+    def _avisar_captura_invalida(self, captura: Captura) -> None:
+        self._enviar_aviso(
+            captura,
+            "Blick: sua captura não foi reconhecida como milho",
+            [
+                f"A foto que você enviou (captura {captura.captura_id}) não foi "
+                "reconhecida como uma planta de milho pelo nosso modelo.",
+                "Isso costuma acontecer quando a foto está com pouca luz, "
+                "desfocada, tirada de um ângulo muito distante, ou não mostra "
+                "a planta claramente.",
+                "Recomendamos enviar uma nova captura, com boa iluminação e "
+                "enquadrando bem a folha ou a planta de milho.",
+            ],
+        )
 
 
 class ClassifyPendentesUseCase:
@@ -333,7 +325,8 @@ class ReclassificarTodasUseCase:
         for captura in capturas:
             try:
                 self._classify_use_case.execute(
-                    captura.plantacao_id, captura.timestamp, captura.captura_id
+                    captura.plantacao_id, captura.timestamp, captura.captura_id,
+                    notificar=False,  # reprocessamento em lote nao manda email
                 )
                 processadas += 1
             except Exception:

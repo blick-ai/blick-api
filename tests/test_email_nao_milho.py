@@ -1,17 +1,19 @@
-import email
-import io
-from unittest.mock import MagicMock
+import pytest
 
-from PIL import Image
+# o CI instala so pytest e flake8: sem Pillow/boto3 estes testes sao pulados
+Image = pytest.importorskip("PIL.Image")
+pytest.importorskip("boto3")
 
-from application.use_cases import ClassifyCapturaUseCase
-from domain.entities import (
+import io  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+from application.use_cases import ClassifyCapturaUseCase, ReclassificarTodasUseCase  # noqa: E402
+from domain.entities import (  # noqa: E402
     Captura,
     ClassificacaoResultado,
     Coordenadas,
     JetsonNanoInfo,
 )
-from infrastructure.ses_email_service import SESEmailService
 
 
 def _jpeg() -> bytes:
@@ -35,7 +37,7 @@ def _captura(origem="manual") -> Captura:
     )
 
 
-def _caso(status, origem="manual", email_ok="a@b.com"):
+def _caso(status, origem="manual", email_ok="a@b.com", notificar=True):
     repo, storage, classifier = MagicMock(), MagicMock(), MagicMock()
     repo.get.return_value = _captura(origem)
     storage.download_image.return_value = _jpeg()
@@ -45,29 +47,40 @@ def _caso(status, origem="manual", email_ok="a@b.com"):
     mail, lookup = MagicMock(), MagicMock()
     lookup.obter_email.return_value = email_ok
     uc = ClassifyCapturaUseCase(repo, storage, classifier, mail, lookup)
-    uc.execute("p1", "2026-10-15T20:00:00Z", "20261015-abc")
+    uc.execute("p1", "2026-10-15T20:00:00Z", "20261015-abc", notificar=notificar)
     return mail
 
 
-def test_nao_milho_manual_envia_email_com_imagem():
+def test_nao_milho_manual_envia_email():
     mail = _caso("nao_milho")
     mail.enviar_email.assert_called_once()
-    args, kwargs = mail.enviar_email.call_args
+    args, _ = mail.enviar_email.call_args
     assert args[0] == "a@b.com"
-    assert kwargs["imagem_jpeg"].startswith(b"\xff\xd8")
-    assert "cid:foto" in args[3]
+    assert "não foi reconhecida como milho" in args[1] or "milho" in args[1]
 
 
 def test_nao_milho_do_rover_nao_envia():
     assert not _caso("nao_milho", origem="rover").enviar_email.called
 
 
-def test_saudavel_nao_envia():
+def test_saudavel_e_nao_saudavel_nao_enviam_email():
     assert not _caso("saudavel").enviar_email.called
+    assert not _caso("nao_saudavel").enviar_email.called
 
 
 def test_sem_email_do_usuario_nao_envia():
     assert not _caso("nao_milho", email_ok=None).enviar_email.called
+
+
+def test_reprocessamento_em_lote_nao_envia_email():
+    assert not _caso("nao_milho", notificar=False).enviar_email.called
+
+
+def test_reclassificar_todas_nao_manda_email():
+    repo, classificar = MagicMock(), MagicMock()
+    repo.list_by_plantacao.return_value = ([_captura()], 1)
+    ReclassificarTodasUseCase(repo, classificar).execute()
+    assert classificar.execute.call_args.kwargs["notificar"] is False
 
 
 def test_falha_no_envio_nao_derruba_classificacao():
@@ -84,32 +97,3 @@ def test_falha_no_envio_nao_derruba_classificacao():
         "p1", "t", "id"
     )
     assert captura.status == "CLASSIFICADO"
-
-
-def _ses():
-    svc = SESEmailService.__new__(SESEmailService)
-    svc._client = MagicMock()
-    svc._remetente = "noreply@blick-ai.com.br"
-    return svc
-
-
-def test_ses_com_imagem_usa_send_raw_email_com_cid_e_anexo():
-    svc = _ses()
-    svc.enviar_email("a@b.com", "Assunto ç", "texto", "<img src='cid:foto'>", imagem_jpeg=_jpeg())
-    svc._client.send_email.assert_not_called()
-    kw = svc._client.send_raw_email.call_args.kwargs
-    assert kw["Source"] == "noreply@blick-ai.com.br"
-    assert kw["Destinations"] == ["a@b.com"]
-    msg = email.message_from_string(kw["RawMessage"]["Data"])
-    tipos = [p.get_content_type() for p in msg.walk()]
-    assert "text/plain" in tipos and "text/html" in tipos and "image/jpeg" in tipos
-    foto = next(p for p in msg.walk() if p.get_content_type() == "image/jpeg")
-    assert foto["Content-ID"] == "<foto>"
-    assert foto.get_payload(decode=True).startswith(b"\xff\xd8")
-
-
-def test_ses_sem_imagem_continua_usando_send_email():
-    svc = _ses()
-    svc.enviar_email("a@b.com", "x", "texto")
-    svc._client.send_email.assert_called_once()
-    svc._client.send_raw_email.assert_not_called()

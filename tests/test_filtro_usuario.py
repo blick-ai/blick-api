@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 pytest.importorskip("boto3")
+pytest.importorskip("PIL")
 
 from application.use_cases import (  # noqa: E402
     DeletarCapturaUseCase,
