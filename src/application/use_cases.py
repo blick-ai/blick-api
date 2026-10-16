@@ -3,8 +3,6 @@ import logging
 import uuid
 from datetime import datetime
 
-from application.deteccao_adesivo import CONFIANCA_ADESIVO, tem_adesivo
-from application.deteccao_adesivo import ORIGEM as ORIGEM_ADESIVO
 from application.preprocessamento_imagem import (
     extrair_timestamp_exif,
     gerar_thumbnail,
@@ -211,10 +209,9 @@ class ClassifyCapturaUseCase:
         agora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         try:
-            original = self._storage.download_image(captura.s3_key)
-            image_bytes = redimensionar_para_classificacao(original)
+            image_bytes = self._storage.download_image(captura.s3_key)
+            image_bytes = redimensionar_para_classificacao(image_bytes)
             resultado = self._classifier.classify(image_bytes)
-            self._aplicar_regra_adesivo(resultado, original)
         except Exception as e:
             captura.status = "ERRO"
             captura.erro_detalhes = str(e)
@@ -237,19 +234,6 @@ class ClassifyCapturaUseCase:
             self._avisar_captura_invalida(captura)
 
         return captura
-
-    @staticmethod
-    def _aplicar_regra_adesivo(resultado, imagem_original: bytes) -> None:
-        """Adesivo amarelo = marca de planta doente que o modelo nao enxerga.
-        So age sobre 'saudavel': nao_saudavel e nao_milho ficam como estao."""
-        if resultado.status_geral != "saudavel":
-            return
-        pct = tem_adesivo(imagem_original)
-        if pct is not None:
-            resultado.status_geral = "nao_saudavel"
-            resultado.confianca_status_geral = CONFIANCA_ADESIVO
-            resultado.origem = ORIGEM_ADESIVO
-            resultado.adesivo_pct = pct
 
     def _deve_notificar(self, captura: Captura, notificar: bool) -> bool:
         # so upload manual: o rover manda centenas de fotos por varredura e
