@@ -3,6 +3,8 @@ import logging
 import uuid
 from datetime import datetime
 
+from application.deteccao_adesivo import CONFIANCA_ADESIVO, tem_adesivo
+from application.deteccao_adesivo import ORIGEM as ORIGEM_ADESIVO
 from application.preprocessamento_imagem import (
     extrair_timestamp_exif,
     gerar_thumbnail,
@@ -209,9 +211,10 @@ class ClassifyCapturaUseCase:
         agora = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         try:
-            image_bytes = self._storage.download_image(captura.s3_key)
-            image_bytes = redimensionar_para_classificacao(image_bytes)
+            original = self._storage.download_image(captura.s3_key)
+            image_bytes = redimensionar_para_classificacao(original)
             resultado = self._classifier.classify(image_bytes)
+            self._aplicar_regra_adesivo(resultado, original)
         except Exception as e:
             captura.status = "ERRO"
             captura.erro_detalhes = str(e)
@@ -234,6 +237,19 @@ class ClassifyCapturaUseCase:
             self._avisar_captura_invalida(captura)
 
         return captura
+
+    @staticmethod
+    def _aplicar_regra_adesivo(resultado, imagem_original: bytes) -> None:
+        """Adesivo amarelo = marca de planta doente que o modelo nao enxerga.
+        So age sobre 'saudavel': nao_saudavel e nao_milho ficam como estao."""
+        if resultado.status_geral != "saudavel":
+            return
+        pct = tem_adesivo(imagem_original)
+        if pct is not None:
+            resultado.status_geral = "nao_saudavel"
+            resultado.confianca_status_geral = CONFIANCA_ADESIVO
+            resultado.origem = ORIGEM_ADESIVO
+            resultado.adesivo_pct = pct
 
     def _deve_notificar(self, captura: Captura, notificar: bool) -> bool:
         # so upload manual: o rover manda centenas de fotos por varredura e
@@ -424,6 +440,7 @@ class ListCapturasUseCase:
 
 
 LIMITE_PONTOS_MAPA = 20_000
+STATUS_GERAL_PADRAO_MAPA = "saudavel,nao_saudavel"
 
 
 class MapaLimiteExcedidoError(Exception):
@@ -451,7 +468,9 @@ class ListMapaCapturasUseCase:
     ) -> dict:
         itens = self._repository.list_pontos_mapa(
             plantacao_id=plantacao_id,
-            status_geral=status_geral,
+            # sem filtro explicito, o mapa mostra o mesmo universo do resumo:
+            # so saudavel e nao_saudavel (fora nao_milho e capturas com ERRO)
+            status_geral=status_geral or STATUS_GERAL_PADRAO_MAPA,
             fl_treino=0,  # mapa acompanha a listagem: sem fotos de treino/validacao
             cliente_id=cliente_id,  # e so com os pontos do proprio usuario
         )

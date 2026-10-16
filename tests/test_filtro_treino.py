@@ -274,6 +274,19 @@ def test_listagem_e_mapa_escondem_treino_e_manutencao_nao():
     assert "completo" not in manutencao  # e precisa da captura inteira, pra gravar de volta
 
 
+def test_mapa_sem_filtro_usa_mesmo_universo_do_resumo():
+    pytest.importorskip("PIL")
+    from application.use_cases import ListMapaCapturasUseCase
+
+    repo = _RepoFalso()
+    ListMapaCapturasUseCase(repo).execute()
+    ListMapaCapturasUseCase(repo).execute(status_geral="nao_milho")
+
+    padrao, explicito = repo.chamadas
+    assert padrao["status_geral"] == "saudavel,nao_saudavel"
+    assert explicito["status_geral"] == "nao_milho"  # filtro explicito continua valendo
+
+
 def test_mapa_monta_pontos_e_pula_sem_coordenada():
     pytest.importorskip("PIL")
     from application.use_cases import ListMapaCapturasUseCase
