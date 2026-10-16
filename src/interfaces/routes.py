@@ -289,6 +289,23 @@ def mapa_capturas(
         raise HTTPException(status_code=422, detail=str(e))
 
 
+def _plantas_resposta(analise: list[dict]) -> list[PlantaResponse]:
+    """Planta doente sempre aparece na foto: nao sai como 'aninhada' (o front
+    esconde as aninhadas) e vem por ultimo, pra ser desenhada por cima das
+    saudaveis que cobrem a mesma area. Os dados guardados nao mudam."""
+    ordenadas = sorted(analise, key=lambda p: p.get("classe") == "nao_saudavel")
+    return [
+        PlantaResponse(
+            classe=p.get("classe"),
+            confianca=p.get("confianca"),
+            aninhada=False if p.get("classe") == "nao_saudavel" else p.get("aninhada"),
+            contorno=p.get("contorno"),
+            caixa=p.get("caixa"),
+        )
+        for p in ordenadas
+    ]
+
+
 @router.get("/capturas/{captura_id}", response_model=CapturaDetalheResponse)
 def obter_captura(
     captura_id: str,
@@ -326,16 +343,7 @@ def obter_captura(
         ),
         status_processamento=detalhe.status,
         diagnostico=diagnostico,
-        plantas=[
-            PlantaResponse(
-                classe=p.get("classe"),
-                confianca=p.get("confianca"),
-                aninhada=p.get("aninhada"),
-                contorno=p.get("contorno"),
-                caixa=p.get("caixa"),
-            )
-            for p in analise
-        ],
+        plantas=_plantas_resposta(analise),
         alerta=AlertaResponse(
             emitido=detalhe.alerta_emitido,
             ultima_emissao=detalhe.alerta_emitido_em,
