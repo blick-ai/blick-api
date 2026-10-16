@@ -23,6 +23,7 @@ from domain.exceptions import (
     BlickUserAlreadyExistsError,
     BlickUserNotConfirmedError,
 )
+from domain.exibicao_plantas import plantas_para_exibicao
 from infrastructure.cognito_auth import CognitoAuthService
 from interfaces.dependencies import (
     get_auth_service,
@@ -290,19 +291,15 @@ def mapa_capturas(
 
 
 def _plantas_resposta(analise: list[dict]) -> list[PlantaResponse]:
-    """Planta doente sempre aparece na foto: nao sai como 'aninhada' (o front
-    esconde as aninhadas) e vem por ultimo, pra ser desenhada por cima das
-    saudaveis que cobrem a mesma area. Os dados guardados nao mudam."""
-    ordenadas = sorted(analise, key=lambda p: p.get("classe") == "nao_saudavel")
     return [
         PlantaResponse(
             classe=p.get("classe"),
             confianca=p.get("confianca"),
-            aninhada=False if p.get("classe") == "nao_saudavel" else p.get("aninhada"),
+            aninhada=p.get("aninhada"),
             contorno=p.get("contorno"),
             caixa=p.get("caixa"),
         )
-        for p in ordenadas
+        for p in plantas_para_exibicao(analise)
     ]
 
 
